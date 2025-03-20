@@ -9,12 +9,22 @@ export const verifyUserRole = async () => {
       const accounts = await provider.request({ method: 'eth_requestAccounts' });
 
       if (accounts.length > 0) {
-        const userAddress = accounts[0];
-        const isVerified = await verifyUser(userAddress);
+        const walletAddress = accounts[0];
+
+        // Check if the user is on the correct network
+        const chainId = await provider.request({ method: 'eth_chainId' });
+        const expectedChainId = '0x539'; // Replace with your network's chain ID
+
+        if (chainId !== expectedChainId) {
+          console.error(`Please switch to the correct network (Chain ID: ${expectedChainId}).`);
+          return null;
+        }
+
+        const isVerified = await verifyUser(walletAddress);
 
         if (isVerified) {
           console.log('User is verified.');
-          return userAddress;
+          return walletAddress;
         } else {
           console.log('User is not verified.');
           return null;

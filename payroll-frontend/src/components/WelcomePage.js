@@ -1,23 +1,61 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { Button, Container, Typography, Box } from '@mui/material';
 
 const WelcomePage = () => {
   return (
-    <div style={styles.container}>
-      <h1>Welcome to Payroll Management System</h1>
-      <Link to="/login-employee" style={styles.button}>
-        Login as Employee
-      </Link>
-      <Link to="/login-admin" style={styles.button}>
-        Login as Admin
-      </Link>
-      <Link to="/register-employee" style={styles.button}>
-        Register as Employee
-      </Link>
-      <Link to="/register-admin" style={styles.button}>
-        Register as Admin
-      </Link>
-    </div>
+    <Container style={styles.container}>
+      <Typography variant="h2" gutterBottom>
+        Welcome to Payroll Management System
+      </Typography>
+      <Box style={styles.buttonContainer}>
+        <Button
+          variant="contained"
+          color="primary"
+          component={Link}
+          to="/login-employee"
+          style={styles.button}
+        >
+          Login as Employee
+        </Button>
+        <Button
+          variant="contained"
+          color="primary"
+          component={Link}
+          to="/login-admin"
+          style={styles.button}
+        >
+          Login as Admin
+        </Button>
+        <Button
+          variant="contained"
+          color="secondary"
+          component={Link}
+          to="/register-employee"
+          style={styles.button}
+        >
+          Register as Employee
+        </Button>
+        <Button
+          variant="contained"
+          color="secondary"
+          component={Link}
+          to="/register-admin"
+          style={styles.button}
+        >
+          Register as Admin
+        </Button>
+        <Button
+          variant="contained"
+          color="secondary"
+          component={Link}
+          to="/login-owner"
+          style={styles.button}
+        >
+          Login as Owner
+        </Button>
+      </Box>
+    </Container>
   );
 };
 
@@ -28,17 +66,17 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     height: '100vh',
-    backgroundColor: '#f0f0f0',
+    background: 'linear-gradient(135deg, #f5f7fa, #c3cfe2)',
+    padding: '20px',
+  },
+  buttonContainer: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+    marginTop: '20px',
   },
   button: {
-    margin: '10px',
-    padding: '10px 20px',
-    fontSize: '16px',
-    cursor: 'pointer',
-    textDecoration: 'none',
-    color: 'white',
-    backgroundColor: '#007bff',
-    borderRadius: '5px',
+    width: '200px',
   },
 };
 

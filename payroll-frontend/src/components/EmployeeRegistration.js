@@ -1,81 +1,152 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import detectEthereumProvider from '@metamask/detect-provider';
-import { requestEmployeeRole } from '../utils/contract';
+import { registerEmployee } from '../utils/contract'; // Import registerEmployee
+import { uploadToIPFS } from '../utils/ipfs'; // Import IPFS upload function
+import { TextField, Button, CircularProgress, Snackbar, Alert, Box, Typography } from '@mui/material';
 
 const EmployeeRegistration = () => {
-  const navigate = useNavigate();
-  const [name, setName] = useState('');
-  const [employeeId, setEmployeeId] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [bankName, setBankName] = useState('');
+  const [accountNumber, setAccountNumber] = useState('');
+  const [sortCode, setSortCode] = useState('');
+  const [email, setEmail] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [address, setAddress] = useState('');
-  const [bankAccount, setBankAccount] = useState('');
+  const [employeeId, setEmployeeId] = useState('');
   const [error, setError] = useState('');
-  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [success, setSuccess] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setLoading(true);
 
-    const provider = await detectEthereumProvider();
-
-    if (provider) {
-      try {
-        const accounts = await provider.request({ method: 'eth_requestAccounts' });
-
-        if (accounts.length > 0) {
-          const walletAddress = accounts[0];
-          await requestEmployeeRole(name, employeeId, address, bankAccount, walletAddress);
-          setIsSubmitted(true);
-          setError('');
-        } else {
-          setError('No accounts found. Please create or unlock an account in MetaMask.');
-        }
-      } catch (error) {
-        console.error('Error connecting to MetaMask:', error);
-        setError('Failed to connect to MetaMask. Please try again.');
+    try {
+      // Step 1: Check if MetaMask is installed
+      if (!window.ethereum) {
+        setError('MetaMask is not installed. Please install MetaMask to proceed.');
+        return;
       }
-    } else {
-      setError('Please install MetaMask to use this application.');
+
+      // Step 2: Prepare employee data
+      const employeeData = {
+        fullName,
+        bankName,
+        accountNumber,
+        sortCode,
+        email,
+        phoneNumber,
+        address,
+        employeeId,
+      };
+
+      // Step 3: Upload employee data to IPFS
+      const ipfsHash = await uploadToIPFS(JSON.stringify(employeeData));
+
+      // Step 4: Register employee with the IPFS hash
+      await registerEmployee(ipfsHash);
+
+      setSuccess('Employee registration request submitted. Waiting for admin approval.');
+      setError('');
+    } catch (error) {
+      console.error('Error:', error);
+      setError('Failed to submit employee registration. Please try again.');
+      setSuccess('');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div style={styles.container}>
-      <h1>Employee Registration</h1>
-      <form onSubmit={handleSubmit}>
-        <input
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Name"
+    <Box style={styles.container}>
+      <Typography variant="h4" gutterBottom>
+        Employee Registration
+      </Typography>
+      <form onSubmit={handleSubmit} style={styles.form}>
+        <TextField
+          label="Full Name"
+          variant="outlined"
+          value={fullName}
+          onChange={(e) => setFullName(e.target.value)}
+          fullWidth
           required
         />
-        <input
-          type="text"
-          value={employeeId}
-          onChange={(e) => setEmployeeId(e.target.value)}
-          placeholder="Employee ID"
+        <TextField
+          label="Bank Name"
+          variant="outlined"
+          value={bankName}
+          onChange={(e) => setBankName(e.target.value)}
+          fullWidth
           required
         />
-        <input
-          type="text"
+        <TextField
+          label="Account Number"
+          variant="outlined"
+          value={accountNumber}
+          onChange={(e) => setAccountNumber(e.target.value)}
+          fullWidth
+          required
+        />
+        <TextField
+          label="Sort Code"
+          variant="outlined"
+          value={sortCode}
+          onChange={(e) => setSortCode(e.target.value)}
+          fullWidth
+          required
+        />
+        <TextField
+          label="Email"
+          variant="outlined"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          fullWidth
+          required
+        />
+        <TextField
+          label="Phone Number"
+          variant="outlined"
+          value={phoneNumber}
+          onChange={(e) => setPhoneNumber(e.target.value)}
+          fullWidth
+          required
+        />
+        <TextField
+          label="Address"
+          variant="outlined"
           value={address}
           onChange={(e) => setAddress(e.target.value)}
-          placeholder="Address"
+          fullWidth
           required
         />
-        <input
-          type="text"
-          value={bankAccount}
-          onChange={(e) => setBankAccount(e.target.value)}
-          placeholder="Bank Account Number"
+        <TextField
+          label="Employee ID"
+          variant="outlined"
+          value={employeeId}
+          onChange={(e) => setEmployeeId(e.target.value)}
+          fullWidth
           required
         />
-        <button type="submit" disabled={isSubmitted}>
-          {isSubmitted ? 'Request Submitted' : 'Submit Request'}
-        </button>
+        <Button
+          type="submit"
+          variant="contained"
+          color="primary"
+          disabled={loading}
+        >
+          {loading ? <CircularProgress size={24} /> : 'Submit Request'}
+        </Button>
       </form>
-      {error && <p style={styles.error}>{error}</p>}
-    </div>
+      {error && (
+        <Snackbar open={!!error} autoHideDuration={6000} onClose={() => setError('')}>
+          <Alert severity="error">{error}</Alert>
+        </Snackbar>
+      )}
+      {success && (
+        <Snackbar open={!!success} autoHideDuration={6000} onClose={() => setSuccess('')}>
+          <Alert severity="success">{success}</Alert>
+        </Snackbar>
+      )}
+    </Box>
   );
 };
 
@@ -85,12 +156,13 @@ const styles = {
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    height: '100vh',
-    backgroundColor: '#f0f0f0',
+    padding: '20px',
   },
-  error: {
-    color: 'red',
-    marginTop: '10px',
+  form: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+    width: '400px',
   },
 };
 
