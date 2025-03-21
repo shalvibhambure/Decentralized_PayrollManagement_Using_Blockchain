@@ -6,7 +6,6 @@ import { Button, CircularProgress, Snackbar, Alert, Box, Typography, Table, Tabl
 const AdminDashboard = () => {
   const [employeeRequests, setEmployeeRequests] = useState([]);
   const [approvedEmployees, setApprovedEmployees] = useState([]);
-  const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [employeeDetails, setEmployeeDetails] = useState(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -37,8 +36,8 @@ const AdminDashboard = () => {
   const handleViewDetails = async (employeeAddress) => {
     try {
       const details = await getEmployeeDetails(employeeAddress);
-      const data = await fetchFromIPFS(details.ipfsHash);
-      setEmployeeDetails(data);
+      const employeeData = await fetchFromIPFS(details.ipfsHash);
+      setEmployeeDetails(employeeData);
       setOpenDialog(true);
     } catch (error) {
       console.error('Error fetching employee details:', error);

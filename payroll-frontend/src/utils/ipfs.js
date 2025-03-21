@@ -11,10 +11,10 @@ const ipfs = create({
 export const uploadToIPFS = async (data) => {
   try {
     const { cid } = await ipfs.add(data);
-    return cid.toString();
+    return cid.toString(); // Return the CID (Content Identifier)
   } catch (error) {
     console.error('Error uploading to IPFS:', error);
-    throw new Error('Failed to upload data to IPFS.');
+    throw error;
   }
 };
 
@@ -22,13 +22,22 @@ export const uploadToIPFS = async (data) => {
 export const fetchFromIPFS = async (cid) => {
   try {
     const stream = ipfs.cat(cid);
-    let data = '';
+    let data = [];
+
     for await (const chunk of stream) {
-      data += chunk.toString();
+      // Collect raw bytes
+      data.push(...chunk);
     }
-    return data;
+
+    // Convert raw bytes to a UTF-8 string
+    const jsonString = String.fromCharCode(...data);
+    console.log('Decoded JSON String:', jsonString);
+
+    // Parse the JSON data
+    const parsedData = JSON.parse(jsonString);
+    return parsedData;
   } catch (error) {
     console.error('Error fetching from IPFS:', error);
-    throw new Error('Failed to fetch data from IPFS.');
+    throw error;
   }
 };

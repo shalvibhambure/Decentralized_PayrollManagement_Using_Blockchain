@@ -5,12 +5,12 @@ contract Payroll {
     address public owner;
     address[] public pendingAdmins;
     address[] public pendingEmployees;
-    address[] public approvedEmployees; // New array to store approved employees
+    address[] public approvedEmployees;
 
     struct PayrollRecord {
-        string ipfsHash; // IPFS hash of the encrypted payroll data
-        address employee; // Employee address
-        address employer; // Employer address
+        string ipfsHash;
+        address employee;
+        address employer;
     }
 
     struct AdminRequest {
@@ -21,7 +21,7 @@ contract Payroll {
     }
 
     struct EmployeeRequest {
-        string ipfsHash; // IPFS hash of employee data
+        string ipfsHash;
         bool approved;
     }
 
@@ -33,23 +33,20 @@ contract Payroll {
     mapping(address => mapping(uint256 => bool)) public accessPermissions;
     mapping(address => AdminRequest) public adminRequests;
     mapping(address => EmployeeRequest) public employeeRequests;
-    mapping(address => string) public employeeDataHashes; // IPFS hash of employee data
+    mapping(address => string) public employeeDataHashes;
 
-    // Events
     event EmployeeRegistered(address indexed employee, string ipfsHash);
     event EmployeeApproved(address indexed employee);
+    event EmployeeRejected(address indexed employee);
 
-    // Constructor to set the owner during deployment
     constructor() {
         owner = msg.sender;
     }
 
-    // Function to verify if an address is the owner
     function verifyOwner(address _address) external view returns (bool) {
         return _address == owner;
     }
 
-    // Function to request admin role
     function requestAdminRole(string memory _name, uint256 _employeeId, string memory _email) external {
         require(!admins[msg.sender], "You are already an admin.");
         require(adminRequests[msg.sender].employeeId == 0, "You have already submitted a request.");
@@ -62,12 +59,10 @@ contract Payroll {
         });
     }
 
-    // Function to get pending admin requests
     function getPendingAdmins() external view returns (address[] memory) {
         return pendingAdmins;
     }
 
-    // Function to approve an admin request (only owner can call this)
     function approveAdmin(address _adminAddress) external {
         require(msg.sender == owner, "Only owner can approve admins.");
         require(adminRequests[_adminAddress].employeeId != 0, "No request found for this address.");
@@ -79,7 +74,6 @@ contract Payroll {
         adminEmails[_adminAddress] = adminRequests[_adminAddress].email;
         adminRequests[_adminAddress].approved = true;
 
-        // Remove the approved admin from the pendingAdmins array
         for (uint i = 0; i < pendingAdmins.length; i++) {
             if (pendingAdmins[i] == _adminAddress) {
                 pendingAdmins[i] = pendingAdmins[pendingAdmins.length - 1];
@@ -89,18 +83,15 @@ contract Payroll {
         }
     }
 
-    // Function to verify if an address is an admin
     function isAdmin(address _address) external view returns (bool) {
         return admins[_address];
     }
 
-    // Function to reject an admin request
     function rejectAdmin(address _adminAddress) external {
         require(msg.sender == owner, "Only owner can reject admins.");
         require(adminRequests[_adminAddress].employeeId != 0, "No request found for this address.");
         require(!adminRequests[_adminAddress].approved, "Request already approved.");
 
-        // Remove the rejected admin from the pendingAdmins array
         for (uint i = 0; i < pendingAdmins.length; i++) {
             if (pendingAdmins[i] == _adminAddress) {
                 pendingAdmins[i] = pendingAdmins[pendingAdmins.length - 1];
@@ -109,11 +100,9 @@ contract Payroll {
             }
         }
 
-        // Delete the admin request
         delete adminRequests[_adminAddress];
     }
 
-    // Function for employees to register and submit their data
     function registerEmployee(string memory ipfsHash) external {
         require(!employeeRequests[msg.sender].approved, "Employee already registered.");
         require(bytes(ipfsHash).length > 0, "IPFS hash cannot be empty.");
@@ -127,7 +116,6 @@ contract Payroll {
         emit EmployeeRegistered(msg.sender, ipfsHash);
     }
 
-    // Function for admins to approve employee requests
     function approveEmployee(address employee) external {
         require(admins[msg.sender], "Only admin can approve employees.");
         require(!employeeRequests[employee].approved, "Employee already approved.");
@@ -135,11 +123,8 @@ contract Payroll {
 
         employeeRequests[employee].approved = true;
         employeeDataHashes[employee] = employeeRequests[employee].ipfsHash;
-
-        // Add the employee to the approvedEmployees array
         approvedEmployees.push(employee);
 
-        // Remove the approved employee from the pendingEmployees array
         for (uint i = 0; i < pendingEmployees.length; i++) {
             if (pendingEmployees[i] == employee) {
                 pendingEmployees[i] = pendingEmployees[pendingEmployees.length - 1];
@@ -151,19 +136,32 @@ contract Payroll {
         emit EmployeeApproved(employee);
     }
 
-    // Function to get pending employee requests
+    function rejectEmployee(address employee) external {
+        require(admins[msg.sender], "Only admin can reject employees.");
+        require(!employeeRequests[employee].approved, "Employee already approved.");
+
+        for (uint i = 0; i < pendingEmployees.length; i++) {
+            if (pendingEmployees[i] == employee) {
+                pendingEmployees[i] = pendingEmployees[pendingEmployees.length - 1];
+                pendingEmployees.pop();
+                break;
+            }
+        }
+
+        delete employeeRequests[employee];
+        emit EmployeeRejected(employee);
+    }
+
     function getPendingEmployees() external view returns (address[] memory) {
         return pendingEmployees;
     }
 
-    // Function to get approved employees
     function getApprovedEmployees() external view returns (address[] memory) {
         return approvedEmployees;
     }
 
-    // Function to get employee data hash
-    function getEmployeeDataHash(address employee) external view returns (string memory) {
-        return employeeDataHashes[employee];
+    function getEmployeeDetails(address employee) external view returns (EmployeeRequest memory) {
+        return employeeRequests[employee];
     }
 
     modifier onlyEmployer(uint256 recordId) {
@@ -171,22 +169,18 @@ contract Payroll {
         _;
     }
 
-    // Add a new payroll record
     function addPayrollRecord(uint256 recordId, string memory ipfsHash, address employee) public {
         payrollRecords[recordId] = PayrollRecord(ipfsHash, employee, msg.sender);
     }
 
-    // Grant access to an employee
     function grantAccess(uint256 recordId, address employee) public onlyEmployer(recordId) {
         accessPermissions[employee][recordId] = true;
     }
 
-    // Revoke access from an employee
     function revokeAccess(uint256 recordId, address employee) public onlyEmployer(recordId) {
         accessPermissions[employee][recordId] = false;
     }
 
-    // Get the IPFS hash of a payroll record
     function getPayrollRecord(uint256 recordId) public view returns (string memory) {
         require(accessPermissions[msg.sender][recordId], "Not authorized");
         return payrollRecords[recordId].ipfsHash;

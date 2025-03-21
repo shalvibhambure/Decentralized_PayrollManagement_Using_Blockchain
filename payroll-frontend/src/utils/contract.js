@@ -1,176 +1,9 @@
 import Web3 from 'web3';
 import Payroll from '../contracts/Payroll.json'; // Import your contract ABI
+
 const web3 = new Web3(Web3.givenProvider || 'http://127.0.0.1:7545'); // Replace with your Ganache RPC URL
-const contractAddress = '0xC4a26d678dA43C7BaDbD54e2Ed263B81b28F9246'; // Replace with your contract address
+const contractAddress = '0xE4909B4C948e6b225009598879fFdca819ad85AC'; // Replace with your contract address
 const contract = new web3.eth.Contract(Payroll.abi, contractAddress); // Use the full ABI
-const contractABI = [
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "_address",
-        "type": "address"
-      }
-    ],
-    "name": "verifyOwner",
-    "outputs": [
-      {
-        "internalType": "bool",
-        "name": "",
-        "type": "bool"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-  "inputs": [
-    {
-      "internalType": "address",
-      "name": "",
-      "type": "address"
-    },
-    {
-      "internalType": "uint256",
-      "name": "",
-      "type": "uint256"
-    }
-  ],
-  "name": "accessPermissions",
-  "outputs": [
-    {
-      "internalType": "bool",
-      "name": "",
-      "type": "bool"
-    }
-  ],
-  "stateMutability": "view",
-  "type": "function",
-  "constant": true
-},
-{
-  "inputs": [
-    {
-      "internalType": "uint256",
-      "name": "",
-      "type": "uint256"
-    }
-  ],
-  "name": "payrollRecords",
-  "outputs": [
-    {
-      "internalType": "string",
-      "name": "ipfsHash",
-      "type": "string"
-    },
-    {
-      "internalType": "address",
-      "name": "employee",
-      "type": "address"
-    },
-    {
-      "internalType": "address",
-      "name": "employer",
-      "type": "address"
-    }
-  ],
-  "stateMutability": "view",
-  "type": "function",
-  "constant": true
-},
-{
-  "inputs": [
-    {
-      "internalType": "uint256",
-      "name": "recordId",
-      "type": "uint256"
-    },
-    {
-      "internalType": "string",
-      "name": "ipfsHash",
-      "type": "string"
-    },
-    {
-      "internalType": "address",
-      "name": "employee",
-      "type": "address"
-    }
-  ],
-  "name": "addPayrollRecord",
-  "outputs": [],
-  "stateMutability": "nonpayable",
-  "type": "function"
-},
-{
-  "inputs": [
-    {
-      "internalType": "uint256",
-      "name": "recordId",
-      "type": "uint256"
-    },
-    {
-      "internalType": "address",
-      "name": "employee",
-      "type": "address"
-    }
-  ],
-  "name": "grantAccess",
-  "outputs": [],
-  "stateMutability": "nonpayable",
-  "type": "function"
-},
-{
-  "inputs": [
-    {
-      "internalType": "uint256",
-      "name": "recordId",
-      "type": "uint256"
-    },
-    {
-      "internalType": "address",
-      "name": "employee",
-      "type": "address"
-    }
-  ],
-  "name": "revokeAccess",
-  "outputs": [],
-  "stateMutability": "nonpayable",
-  "type": "function"
-},
-{
-  "inputs": [
-    {
-      "internalType": "uint256",
-      "name": "recordId",
-      "type": "uint256"
-    }
-  ],
-  "name": "getPayrollRecord",
-  "outputs": [
-    {
-      "internalType": "string",
-      "name": "",
-      "type": "string"
-    }
-  ],
-  "stateMutability": "view",
-  "type": "function",
-  "constant": true
-},
-{
-  "inputs": [
-    {
-      "internalType": "string",
-      "name": "ipfsHash",
-      "type": "string"
-    }
-  ],
-  "name": "registerEmployee",
-  "outputs": [],
-  "stateMutability": "nonpayable",
-  "type": "function"
-}
-]; // Replace with your contract ABI
 
 // Initialize Web3
 const initWeb3 = async () => {
@@ -240,7 +73,7 @@ export const registerEmployee = async (ipfsHash) => {
 };
 
 // Function to get pending employee requests
-export const getEmployeeRequests = async () => {
+export const getPendingEmployees = async () => {
   try {
     const contract = await initContract();
     const requests = await contract.methods
@@ -248,7 +81,37 @@ export const getEmployeeRequests = async () => {
       .call();
     return requests;
   } catch (error) {
-    console.error('Error fetching employee requests:', error);
+    console.error('Error fetching pending employees:', error);
+    throw error;
+  }
+};
+
+// Function to get employee details
+export const getEmployeeDetails = async (employeeAddress) => {
+  try {
+    const contract = await initContract();
+    const details = await contract.methods
+      .getEmployeeDetails(employeeAddress)
+      .call();
+    return details;
+  } catch (error) {
+    console.error('Error fetching employee details:', error);
+    throw error;
+  }
+};
+
+// Function to reject an employee request
+export const rejectEmployee = async (employeeAddress) => {
+  try {
+    const contract = await initContract();
+    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+    const walletAddress = accounts[0];
+
+    await contract.methods
+      .rejectEmployee(employeeAddress)
+      .send({ from: walletAddress });
+  } catch (error) {
+    console.error('Error rejecting employee:', error);
     throw error;
   }
 };
@@ -302,7 +165,10 @@ export const getPayrollRecord = async (recordId) => {
 // Function to get approved employees
 export const getApprovedEmployees = async () => {
   try {
-    const approvedEmployees = await contract.methods.getApprovedEmployees().call();
+    const contract = await initContract();
+    const approvedEmployees = await contract.methods
+      .getApprovedEmployees()
+      .call();
     return approvedEmployees;
   } catch (error) {
     console.error('Error fetching approved employees:', error);

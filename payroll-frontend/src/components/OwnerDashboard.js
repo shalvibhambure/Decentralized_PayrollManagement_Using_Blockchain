@@ -6,7 +6,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import Payroll from '../contracts/Payroll.json'; // For Truffle
 // import Payroll from '../payroll-smart-contract/artifacts/contracts/Payroll.sol/Payroll.json'; // For Hardhat
 
-const contractAddress = '0xC4a26d678dA43C7BaDbD54e2Ed263B81b28F9246'; // Replace with your contract address
+const contractAddress = '0xE4909B4C948e6b225009598879fFdca819ad85AC'; // Replace with your contract address
 
 const OwnerDashboard = () => {
   const [pendingAdmins, setPendingAdmins] = useState([]);
