@@ -5,7 +5,7 @@ import { Button, CircularProgress, Snackbar, Alert, Box, Typography, TextField }
 // Replace with your contract ABI and address
 import Payroll from '../contracts/Payroll.json';
 // import Payroll from '../payroll-smart-contract/artifacts/contracts/Payroll.sol/Payroll.json'; // For Hardhat
-const contractAddress = '0xE4909B4C948e6b225009598879fFdca819ad85AC'; // Replace with your contract address
+const contractAddress = '0xb13209725CD8F5debEEd01aBed34687D138f0AdF'; // Replace with your contract address
 
 const AdminRegistration = () => {
   const [name, setName] = useState('');
@@ -30,19 +30,26 @@ const AdminRegistration = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-
+  
     try {
       const web3 = await initWeb3();
       const contract = new web3.eth.Contract(Payroll.abi, contractAddress);
       const accounts = await web3.eth.getAccounts();
       const walletAddress = accounts[0];
-
-      // Call the requestAdminRole function
-      await contract.methods.requestAdminRole(name, employeeId, email).send({ from: walletAddress });
+  
+      // Add a gas limit (e.g., 500,000 gas)
+      const gasLimit = 500000;
+  
+      // Call the requestAdminRole function with gas limit
+      await contract.methods
+        .requestAdminRole(name, employeeId, email)
+        .send({ from: walletAddress, gas: gasLimit });
+  
       setSuccess('Admin registration request submitted. Waiting for owner approval.');
       setError('');
     } catch (error) {
       console.error('Error submitting admin request:', error);
+      console.error('Full error object:', JSON.stringify(error, null, 2));
       setError('Failed to submit admin request. Please try again.');
     } finally {
       setLoading(false);

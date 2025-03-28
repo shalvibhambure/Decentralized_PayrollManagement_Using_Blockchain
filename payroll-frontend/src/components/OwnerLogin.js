@@ -6,7 +6,7 @@ import { Button, CircularProgress, Snackbar, Alert, Box, Typography } from '@mui
 // Replace with your contract ABI and address
 import Payroll from '../contracts/Payroll.json'; // For Truffle
 // import Payroll from '../payroll-smart-contract/artifacts/contracts/Payroll.sol/Payroll.json'; // For Hardhat
-const contractAddress = '0xE4909B4C948e6b225009598879fFdca819ad85AC'; // Replace with your contract address
+const contractAddress = '0xb13209725CD8F5debEEd01aBed34687D138f0AdF'; // Replace with your contract address
 
 const OwnerLogin = () => {
   const [error, setError] = useState('');

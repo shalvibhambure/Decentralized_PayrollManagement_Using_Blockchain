@@ -6,11 +6,12 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import Payroll from '../contracts/Payroll.json'; // For Truffle
 // import Payroll from '../payroll-smart-contract/artifacts/contracts/Payroll.sol/Payroll.json'; // For Hardhat
 
-const contractAddress = '0xE4909B4C948e6b225009598879fFdca819ad85AC'; // Replace with your contract address
+const contractAddress = '0xb13209725CD8F5debEEd01aBed34687D138f0AdF'; // Replace with your contract address
 
 const OwnerDashboard = () => {
   const [pendingAdmins, setPendingAdmins] = useState([]);
   const [adminDetails, setAdminDetails] = useState([]); // Store admin details
+  const [approvedAdmins, setApprovedAdmins] = useState([]);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
@@ -57,22 +58,19 @@ const OwnerDashboard = () => {
       const web3 = await initWeb3();
       const contract = new web3.eth.Contract(Payroll.abi, contractAddress);
       const admins = await contract.methods.getPendingAdmins().call({ from: walletAddress });
-
-      // Fetch details for each admin
+  
+      console.log('Pending Admins:', admins); // Log the fetched admin addresses
+  
       const adminDetails = await Promise.all(
         admins.map(async (adminAddress) => {
           return await fetchAdminDetails(adminAddress);
         })
       );
-
-      // Filter out null or invalid entries
-      const validAdminDetails = adminDetails.filter((detail) => detail !== null);
-
-      // Debugging: Log the validAdminDetails array
-      console.log('Valid Admin Details:', validAdminDetails);
-
+  
+      console.log('Admin Details:', adminDetails); // Log the fetched admin details
+  
       setPendingAdmins(admins);
-      setAdminDetails(validAdminDetails); // Set only valid admin details
+      setAdminDetails(adminDetails.filter((detail) => detail !== null));
     } catch (error) {
       console.error('Error fetching pending admins:', error);
       setError('Failed to fetch pending admin requests.');
@@ -115,6 +113,34 @@ const OwnerDashboard = () => {
     }
   };
 
+  const fetchApprovedAdmins = useCallback(async () => {
+    try {
+      const web3 = await initWeb3();
+      const contract = new web3.eth.Contract(Payroll.abi, contractAddress);
+      const admins = await contract.methods.getApprovedAdmins().call({ from: walletAddress });
+  
+      // Fetch details for each approved admin
+      const adminDetails = await Promise.all(
+        admins.map(async (adminAddress) => {
+          const name = await contract.methods.adminNames(adminAddress).call();
+          const employeeId = await contract.methods.adminEmployeeIds(adminAddress).call();
+          const email = await contract.methods.adminEmails(adminAddress).call();
+          return {
+            address: adminAddress,
+            name: name || 'N/A',
+            employeeId: employeeId.toString() || 'N/A',
+            email: email || 'N/A',
+          };
+        })
+      );
+  
+      setApprovedAdmins(adminDetails);
+    } catch (error) {
+      console.error('Error fetching approved admins:', error);
+      setError('Failed to fetch approved admins.');
+    }
+  }, [walletAddress]);
+
 
   // Fetch pending admins on component mount
   useEffect(() => {
@@ -122,14 +148,17 @@ const OwnerDashboard = () => {
       navigate('/owner-login');
     } else {
       fetchPendingAdmins();
+      fetchApprovedAdmins(); // Fetch approved admins
     }
-  }, [walletAddress, navigate, fetchPendingAdmins]);
+  }, [walletAddress, navigate, fetchPendingAdmins, fetchApprovedAdmins]);
 
   return (
     <Box style={styles.container}>
       <Typography variant="h4" gutterBottom>
         Owner Dashboard
       </Typography>
+  
+      {/* Pending Admin Requests */}
       <Typography variant="h6">Pending Admin Requests</Typography>
       <TableContainer component={Paper}>
         <Table>
@@ -179,6 +208,43 @@ const OwnerDashboard = () => {
           </TableBody>
         </Table>
       </TableContainer>
+  
+      {/* Approved Admins */}
+      <Typography variant="h6" style={{ marginTop: '20px' }}>
+        Approved Admins
+      </Typography>
+      <TableContainer component={Paper}>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>Employee ID</TableCell>
+              <TableCell>Name</TableCell>
+              <TableCell>Email</TableCell>
+              <TableCell>Address</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {approvedAdmins.length > 0 ? (
+              approvedAdmins.map((admin, index) => (
+                <TableRow key={index}>
+                  <TableCell>{admin.employeeId}</TableCell>
+                  <TableCell>{admin.name}</TableCell>
+                  <TableCell>{admin.email}</TableCell>
+                  <TableCell>{admin.address}</TableCell>
+                </TableRow>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell colSpan={4} align="center">
+                  No approved admins.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </TableContainer>
+  
+      {/* Error and Success Messages */}
       {error && (
         <Snackbar open={!!error} autoHideDuration={6000} onClose={() => setError('')}>
           <Alert severity="error">{error}</Alert>

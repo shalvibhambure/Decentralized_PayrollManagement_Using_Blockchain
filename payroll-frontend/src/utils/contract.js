@@ -2,7 +2,7 @@ import Web3 from 'web3';
 import Payroll from '../contracts/Payroll.json'; // Import your contract ABI
 
 const web3 = new Web3(Web3.givenProvider || 'http://127.0.0.1:7545'); // Replace with your Ganache RPC URL
-const contractAddress = '0xE4909B4C948e6b225009598879fFdca819ad85AC'; // Replace with your contract address
+const contractAddress = '0xb13209725CD8F5debEEd01aBed34687D138f0AdF'; // Replace with your contract address
 const contract = new web3.eth.Contract(Payroll.abi, contractAddress); // Use the full ABI
 
 // Initialize Web3

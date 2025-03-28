@@ -6,6 +6,9 @@ contract Payroll {
     address[] public pendingAdmins;
     address[] public pendingEmployees;
     address[] public approvedEmployees;
+    address[] public approvedAdmins; // Track approved admins
+    uint256 public constant TAX_RATE = 20; // 20%
+    uint256 public constant NI_RATE = 12;  // 12%
 
     struct PayrollRecord {
         string ipfsHash;
@@ -25,6 +28,15 @@ contract Payroll {
         bool approved;
     }
 
+    struct SalaryRecord {
+        uint256 grossSalary;    // in wei
+        uint256 netSalary;
+        uint256 taxAmount;
+        uint256 niAmount;
+        uint256 timestamp;
+        bool paid;
+    }
+
     mapping(address => bool) public admins;
     mapping(address => string) public adminNames;
     mapping(address => uint256) public adminEmployeeIds;
@@ -34,10 +46,23 @@ contract Payroll {
     mapping(address => AdminRequest) public adminRequests;
     mapping(address => EmployeeRequest) public employeeRequests;
     mapping(address => string) public employeeDataHashes;
+    mapping(address => mapping(uint256 => SalaryRecord)) public employeeSalaries; // employee => month => record
+    mapping(address => uint256[]) public employeeSalaryMonths; // Track months with records
 
     event EmployeeRegistered(address indexed employee, string ipfsHash);
     event EmployeeApproved(address indexed employee);
     event EmployeeRejected(address indexed employee);
+    event AdminRequested(address indexed adminAddress, string name, uint256 employeeId, string email);
+    event AdminApproved(address indexed adminAddress);
+    event AdminRejected(address indexed adminAddress);
+    event PayslipGenerated(
+        address indexed employee,
+        uint256 yearMonth,
+        string ipfsHash
+    );
+    
+
+
 
     constructor() {
         owner = msg.sender;
@@ -49,7 +74,7 @@ contract Payroll {
 
     function requestAdminRole(string memory _name, uint256 _employeeId, string memory _email) external {
         require(!admins[msg.sender], "You are already an admin.");
-        require(adminRequests[msg.sender].employeeId == 0, "You have already submitted a request.");
+        require(!adminRequests[msg.sender].approved, "You have already submitted a request.");
 
         adminRequests[msg.sender] = AdminRequest({
             name: _name,
@@ -57,16 +82,19 @@ contract Payroll {
             email: _email,
             approved: false
         });
+
+        pendingAdmins.push(msg.sender);
+        emit AdminRequested(msg.sender, _name, _employeeId, _email);
     }
 
-    function getPendingAdmins() external view returns (address[] memory) {
-        return pendingAdmins;
+    function isAdmin(address _address) external view returns (bool) {
+        return admins[_address];
     }
 
     function approveAdmin(address _adminAddress) external {
         require(msg.sender == owner, "Only owner can approve admins.");
-        require(adminRequests[_adminAddress].employeeId != 0, "No request found for this address.");
-        require(!adminRequests[_adminAddress].approved, "Request already approved.");
+        require(adminRequests[_adminAddress].employeeId != 0, "No request found.");
+        require(!adminRequests[_adminAddress].approved, "Already approved.");
 
         admins[_adminAddress] = true;
         adminNames[_adminAddress] = adminRequests[_adminAddress].name;
@@ -74,6 +102,7 @@ contract Payroll {
         adminEmails[_adminAddress] = adminRequests[_adminAddress].email;
         adminRequests[_adminAddress].approved = true;
 
+        // Remove from pendingAdmins
         for (uint i = 0; i < pendingAdmins.length; i++) {
             if (pendingAdmins[i] == _adminAddress) {
                 pendingAdmins[i] = pendingAdmins[pendingAdmins.length - 1];
@@ -81,10 +110,14 @@ contract Payroll {
                 break;
             }
         }
+
+        // Add to approvedAdmins
+        approvedAdmins.push(_adminAddress);
+        emit AdminApproved(_adminAddress);
     }
 
-    function isAdmin(address _address) external view returns (bool) {
-        return admins[_address];
+    function getPendingAdmins() external view returns (address[] memory) {
+        return pendingAdmins;
     }
 
     function rejectAdmin(address _adminAddress) external {
@@ -102,6 +135,102 @@ contract Payroll {
 
         delete adminRequests[_adminAddress];
     }
+
+    function getApprovedAdmins() external view returns (address[] memory) {
+        return approvedAdmins; // Now returns the dedicated list
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    // Add salary record + auto-calculate deductions
+    function addSalaryRecord(
+        address employee,
+        uint256 yearMonth, // Format: YYYYMM (e.g., 202312 for Dec 2023)
+        uint256 grossSalary
+    ) external onlyAdmin {
+        require(!employeeSalaries[employee][yearMonth].paid, "Salary already recorded");
+
+        (uint256 tax, uint256 ni) = _calculateDeductions(grossSalary);
+        uint256 netSalary = grossSalary - tax - ni;
+
+        employeeSalaries[employee][yearMonth] = SalaryRecord({
+            grossSalary: grossSalary,
+            netSalary: netSalary,
+            taxAmount: tax,
+            niAmount: ni,
+            timestamp: block.timestamp,
+            paid: false
+        });
+
+        employeeSalaryMonths[employee].push(yearMonth);
+    }
+
+    // Internal: Calculate tax and NI
+    function _calculateDeductions(uint256 gross) internal pure returns (uint256 tax, uint256 ni) {
+        tax = (gross * TAX_RATE) / 100;
+        ni = (gross * NI_RATE) / 100;
+        return (tax, ni);
+    }
+
+    // Get salary history for an employee
+    function getSalaryHistory(address employee) external view returns (SalaryRecord[] memory) {
+        uint256[] memory months = employeeSalaryMonths[employee];
+        SalaryRecord[] memory history = new SalaryRecord[](months.length);
+
+        for (uint256 i = 0; i < months.length; i++) {
+            history[i] = employeeSalaries[employee][months[i]];
+        }
+        return history;
+    }
+    function generatePayslipIPFS(
+        address employee,
+        uint256 yearMonth,
+        string calldata ipfsHash
+    ) external onlyAdmin {
+        require(employeeSalaries[employee][yearMonth].timestamp != 0, "Salary record not found");
+        emit PayslipGenerated(employee, yearMonth, ipfsHash);
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     function registerEmployee(string memory ipfsHash) external {
         require(!employeeRequests[msg.sender].approved, "Employee already registered.");
