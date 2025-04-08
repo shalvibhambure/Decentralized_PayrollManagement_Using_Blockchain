@@ -1,169 +1,198 @@
 import React, { useState } from 'react';
-import { registerEmployee } from '../utils/contract'; // Import registerEmployee
-import { uploadToIPFS } from '../utils/ipfs'; // Import IPFS upload function
-import { TextField, Button, CircularProgress, Snackbar, Alert, Box, Typography } from '@mui/material';
+import { useNavigate } from 'react-router-dom';
+import { 
+  TextField, 
+  Button, 
+  CircularProgress, 
+  Snackbar, 
+  Alert, 
+  Box, 
+  Typography,
+  Card,
+  CardContent
+} from '@mui/material';
+import { connectMetaMask, getContract } from '../utils/metamask-utils';
+import { uploadToIPFS } from '../utils/ipfs';
+import Web3 from 'web3';
+import PayrollABI from '../contracts/Payroll.json';
+
+const contractAddress = '0xef5e2be84aC41491A64166c6489E057d3CF085cB';
 
 const EmployeeRegistration = () => {
-  const [fullName, setFullName] = useState('');
-  const [bankName, setBankName] = useState('');
-  const [accountNumber, setAccountNumber] = useState('');
-  const [sortCode, setSortCode] = useState('');
-  const [email, setEmail] = useState('');
-  const [phoneNumber, setPhoneNumber] = useState('');
-  const [address, setAddress] = useState('');
-  const [employeeId, setEmployeeId] = useState('');
+  const [formData, setFormData] = useState({
+    fullName: '',
+    employeeId: '',
+    email: ''
+  });
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [account, setAccount] = useState('');
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
+  const navigate = useNavigate();
 
+  const handleConnect = async () => {
     try {
-      // Step 1: Check if MetaMask is installed
-      if (!window.ethereum) {
-        setError('MetaMask is not installed. Please install MetaMask to proceed.');
-        return;
-      }
-
-      // Step 2: Prepare employee data
-      const employeeData = {
-        fullName,
-        bankName,
-        accountNumber,
-        sortCode,
-        email,
-        phoneNumber,
-        address,
-        employeeId,
-      };
-
-      // Step 3: Upload employee data to IPFS
-      const ipfsHash = await uploadToIPFS(JSON.stringify(employeeData));
-
-      // Step 4: Register employee with the IPFS hash
-      await registerEmployee(ipfsHash);
-
-      setSuccess('Employee registration request submitted. Waiting for admin approval.');
+      setLoading(true);
       setError('');
+      const { account } = await connectMetaMask();
+      setAccount(account);
+      setSuccess('Wallet connected successfully!');
     } catch (error) {
-      console.error('Error:', error);
-      setError('Failed to submit employee registration. Please try again.');
-      setSuccess('');
+      setError(error.message);
     } finally {
       setLoading(false);
     }
   };
 
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!account) {
+      setError('Please connect your wallet first');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+  
+    try {
+      // Validate form
+      if (!formData.fullName || !formData.employeeId || !formData.email) {
+        throw new Error('Please fill all fields');
+      }
+
+      // 1. Upload to IPFS
+      const response = await uploadToIPFS({
+        ...formData,
+        timestamp: new Date().toISOString()
+      });
+
+      if (response.success) {
+        // 2. Initialize contract
+        const web3 = new Web3(window.ethereum);
+        const contract = getContract(web3, PayrollABI.abi, contractAddress);
+        
+        console.log(
+          formData.fullName,
+          formData.employeeId,
+          formData.email,
+          response.cid,
+          response
+        )
+        // 3. Send transaction
+        await contract.methods.registerEmployee(
+          formData.fullName,
+          formData.employeeId,
+          formData.email,
+          response.cid
+        ).send({ from: account });
+    
+        setSuccess('Registration successful!');
+        setTimeout(() => navigate('/employee-dashboard'), 2000);
+      } else {
+        setError(response.message);
+      }
+    } catch (error) {
+      console.log(error);
+      setError(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
   return (
-    <Box style={styles.container}>
-      <Typography variant="h4" gutterBottom>
-        Employee Registration
-      </Typography>
-      <form onSubmit={handleSubmit} style={styles.form}>
-        <TextField
-          label="Full Name"
-          variant="outlined"
-          value={fullName}
-          onChange={(e) => setFullName(e.target.value)}
-          fullWidth
-          required
-        />
-        <TextField
-          label="Bank Name"
-          variant="outlined"
-          value={bankName}
-          onChange={(e) => setBankName(e.target.value)}
-          fullWidth
-          required
-        />
-        <TextField
-          label="Account Number"
-          variant="outlined"
-          value={accountNumber}
-          onChange={(e) => setAccountNumber(e.target.value)}
-          fullWidth
-          required
-        />
-        <TextField
-          label="Sort Code"
-          variant="outlined"
-          value={sortCode}
-          onChange={(e) => setSortCode(e.target.value)}
-          fullWidth
-          required
-        />
-        <TextField
-          label="Email"
-          variant="outlined"
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          fullWidth
-          required
-        />
-        <TextField
-          label="Phone Number"
-          variant="outlined"
-          value={phoneNumber}
-          onChange={(e) => setPhoneNumber(e.target.value)}
-          fullWidth
-          required
-        />
-        <TextField
-          label="Address"
-          variant="outlined"
-          value={address}
-          onChange={(e) => setAddress(e.target.value)}
-          fullWidth
-          required
-        />
-        <TextField
-          label="Employee ID"
-          variant="outlined"
-          value={employeeId}
-          onChange={(e) => setEmployeeId(e.target.value)}
-          fullWidth
-          required
-        />
-        <Button
-          type="submit"
-          variant="contained"
-          color="primary"
-          disabled={loading}
-        >
-          {loading ? <CircularProgress size={24} /> : 'Submit Request'}
-        </Button>
-      </form>
-      {error && (
-        <Snackbar open={!!error} autoHideDuration={6000} onClose={() => setError('')}>
-          <Alert severity="error">{error}</Alert>
-        </Snackbar>
-      )}
-      {success && (
-        <Snackbar open={!!success} autoHideDuration={6000} onClose={() => setSuccess('')}>
-          <Alert severity="success">{success}</Alert>
-        </Snackbar>
-      )}
+    <Box sx={{ 
+      display: 'flex', 
+      justifyContent: 'center', 
+      alignItems: 'center', 
+      minHeight: '100vh',
+      p: 2
+    }}>
+      <Card sx={{ maxWidth: 450, width: '100%' }}>
+        <CardContent>
+          <Typography variant="h5" gutterBottom align="center">
+            Employee Registration
+          </Typography>
+
+          {!account ? (
+            <Box textAlign="center" mt={2}>
+              <Button
+                variant="contained"
+                onClick={handleConnect}
+                disabled={loading}
+              >
+                {loading ? <CircularProgress size={24} /> : 'Connect Wallet'}
+              </Button>
+            </Box>
+          ) : (
+            <>
+              <Typography variant="body2" color="success.main" gutterBottom>
+                Connected: {`${account.substring(0, 6)}...${account.slice(-4)}`}
+              </Typography>
+
+              <form onSubmit={handleSubmit}>
+                <TextField
+                  label="Full Name"
+                  name="fullName"
+                  fullWidth
+                  margin="normal"
+                  value={formData.fullName}
+                  onChange={handleChange}
+                  required
+                />
+                <TextField
+                  label="Employee ID"
+                  name="employeeId"
+                  fullWidth
+                  margin="normal"
+                  value={formData.employeeId}
+                  onChange={handleChange}
+                  required
+                />
+                <TextField
+                  label="Email"
+                  name="email"
+                  fullWidth
+                  margin="normal"
+                  value={formData.email}
+                  onChange={handleChange}
+                  required
+                  type="email"
+                />
+
+                <Button
+                  type="submit"
+                  variant="contained"
+                  fullWidth
+                  sx={{ mt: 2 }}
+                  disabled={loading}
+                >
+                  {loading ? <CircularProgress size={24} /> : 'Register'}
+                </Button>
+              </form>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <Snackbar open={!!error} autoHideDuration={6000} onClose={() => setError('')}>
+        <Alert severity="error" onClose={() => setError('')}>
+          {error}
+        </Alert>
+      </Snackbar>
+
+      <Snackbar open={!!success} autoHideDuration={4000} onClose={() => setSuccess('')}>
+        <Alert severity="success" onClose={() => setSuccess('')}>
+          {success}
+        </Alert>
+      </Snackbar>
     </Box>
   );
-};
-
-const styles = {
-  container: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '20px',
-  },
-  form: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '10px',
-    width: '400px',
-  },
 };
 
 export default EmployeeRegistration;

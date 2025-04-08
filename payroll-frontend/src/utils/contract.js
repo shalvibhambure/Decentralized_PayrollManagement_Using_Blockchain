@@ -2,7 +2,7 @@ import Web3 from 'web3';
 import Payroll from '../contracts/Payroll.json'; // Import your contract ABI
 
 const web3 = new Web3(Web3.givenProvider || 'http://127.0.0.1:7545'); // Replace with your Ganache RPC URL
-const contractAddress = '0xb13209725CD8F5debEEd01aBed34687D138f0AdF'; // Replace with your contract address
+const contractAddress = '0xef5e2be84aC41491A64166c6489E057d3CF085cB'; // Replace with your contract address
 const contract = new web3.eth.Contract(Payroll.abi, contractAddress); // Use the full ABI
 
 // Initialize Web3
@@ -174,4 +174,22 @@ export const getApprovedEmployees = async () => {
     console.error('Error fetching approved employees:', error);
     throw error;
   }
+};
+
+export const addSalary = async (employee, yearMonth, grossWei) => {
+  const accounts = await web3.eth.getAccounts();
+  await contractAddress.methods.addSalary(
+    employee,
+    yearMonth,
+    grossWei
+  ).send({ from: accounts[0] });
+};
+
+export const setPayslipCID = async (employee, yearMonth, cid) => {
+  const accounts = await web3.eth.getAccounts();
+  await contractAddress.methods.setPayslipCID(
+    employee,
+    yearMonth,
+    cid
+  ).send({ from: accounts[0] });
 };

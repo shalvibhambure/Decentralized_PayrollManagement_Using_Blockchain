@@ -2,11 +2,13 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Web3 from 'web3';
 import { Button, Snackbar, Alert, Box, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper } from '@mui/material';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { fetchFromIPFS, isIpfsCid } from '../utils/ipfs';
 // Update the import path to match your project structure
 import Payroll from '../contracts/Payroll.json'; // For Truffle
+import { connectMetaMask } from '../utils/metamask-utils';
 // import Payroll from '../payroll-smart-contract/artifacts/contracts/Payroll.sol/Payroll.json'; // For Hardhat
 
-const contractAddress = '0xb13209725CD8F5debEEd01aBed34687D138f0AdF'; // Replace with your contract address
+const contractAddress = '0xef5e2be84aC41491A64166c6489E057d3CF085cB'; // Replace with your contract address
 
 const OwnerDashboard = () => {
   const [pendingAdmins, setPendingAdmins] = useState([]);
@@ -21,12 +23,11 @@ const OwnerDashboard = () => {
 
   // Initialize web3 and contract
   const initWeb3 = async () => {
-    if (window.ethereum) {
-      const web3 = new Web3(window.ethereum);
-      await window.ethereum.request({ method: 'eth_requestAccounts' }); // Updated method
+    try {
+      const { web3, account } = await connectMetaMask();
       return web3;
-    } else {
-      throw new Error('Please install MetaMask.');
+    } catch (error) {
+      throw new Error('Failed to connect: ' + error.message);
     }
   };
   
@@ -36,15 +37,23 @@ const OwnerDashboard = () => {
       const web3 = await initWeb3();
       const contract = new web3.eth.Contract(Payroll.abi, contractAddress);
       const adminRequest = await contract.methods.adminRequests(adminAddress).call();
-
-      // Debugging: Log the adminRequest object
-      console.log('Admin Request:', adminRequest);
-
+  
+      // Handle IPFS data if present
+      let additionalDetails = {};
+      if (adminRequest.ipfsHash && isIpfsCid(adminRequest.ipfsHash)) {
+        try {
+          additionalDetails = await fetchFromIPFS(adminRequest.ipfsHash);
+        } catch (ipfsError) {
+          console.error('Error fetching IPFS data:', ipfsError);
+        }
+      }
+  
       return {
         address: adminAddress,
-        name: adminRequest.name || 'N/A', // Fallback for missing name
-        employeeId: adminRequest.employeeId ? adminRequest.employeeId.toString() : 'N/A', // Convert to string
-        email: adminRequest.email || 'N/A', // Fallback for missing email
+        name: adminRequest.name || 'N/A',
+        employeeId: adminRequest.employeeId ? adminRequest.employeeId.toString() : 'N/A',
+        email: adminRequest.email || 'N/A',
+        ...additionalDetails
       };
     } catch (error) {
       console.error('Error fetching admin details:', error);

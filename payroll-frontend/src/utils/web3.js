@@ -1,24 +1,31 @@
 import Web3 from 'web3';
 
-// Function to initialize web3
-const initWeb3 = async () => {
+let web3Instance = null;
+
+export const initWeb3 = async () => {
+  if (web3Instance) return web3Instance;
+
   if (window.ethereum) {
-    // Modern dapp browsers (e.g., MetaMask)
-    const web3 = new Web3(window.ethereum);
     try {
       // Request account access
       await window.ethereum.request({ method: 'eth_requestAccounts' });
-      return web3;
+      web3Instance = new Web3(window.ethereum);
+      
+      // Handle account changes
+      window.ethereum.on('accountsChanged', (accounts) => {
+        console.log('Account changed:', accounts[0]);
+      });
+      
+      return web3Instance;
     } catch (error) {
-      console.error('User denied account access:', error);
-      throw new Error('User denied account access.');
+      throw new Error(`User denied access: ${error.message}`);
     }
-  } else if (window.web3) {
-    // Legacy dapp browsers
-    const web3 = new Web3(window.web3.currentProvider);
-    return web3;
   } else {
-    // No Ethereum provider detected
-    throw new Error('Please install MetaMask or another Ethereum provider.');
+    throw new Error('Non-Ethereum browser detected. Install MetaMask');
   }
+};
+
+export const getWeb3 = () => {
+  if (!web3Instance) throw new Error('Web3 not initialized');
+  return web3Instance;
 };

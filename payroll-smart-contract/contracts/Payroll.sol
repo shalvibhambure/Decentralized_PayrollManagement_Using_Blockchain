@@ -6,10 +6,11 @@ contract Payroll {
     address[] public pendingAdmins;
     address[] public pendingEmployees;
     address[] public approvedEmployees;
-    address[] public approvedAdmins; // Track approved admins
-    uint256 public constant TAX_RATE = 20; // 20%
-    uint256 public constant NI_RATE = 12;  // 12%
+    address[] public approvedAdmins;
+    uint256 public constant TAX_RATE = 20;
+    uint256 public constant NI_RATE = 12;
 
+    // Existing structures
     struct PayrollRecord {
         string ipfsHash;
         address employee;
@@ -24,19 +25,48 @@ contract Payroll {
     }
 
     struct EmployeeRequest {
+        string name;
+        uint256 employeeId;
+        string email;
         string ipfsHash;
         bool approved;
+        bool exists; // New flag to check if request exists
     }
 
     struct SalaryRecord {
-        uint256 grossSalary;    // in wei
-        uint256 netSalary;
+        uint256 grossAmount;
         uint256 taxAmount;
         uint256 niAmount;
+        uint256 netAmount;
         uint256 timestamp;
         bool paid;
     }
 
+    struct Payslip {
+        string ipfsHash;
+        bool generated;
+    }
+
+    struct TaxSlab {
+        uint256 min;
+        uint256 max;
+        uint256 rate;
+    }
+
+    // New structures for enhanced functionality
+    struct EmployeeOnChainData {
+        string fullName;
+        uint256 employeeId;
+        string email;
+        uint256 annualSalary;
+        uint256 monthlySalary;
+        uint256 taxAmount;
+        uint256 niAmount;
+        uint256 netSalary;
+        uint256 startDate;
+    }
+
+    // Existing mappings
     mapping(address => bool) public admins;
     mapping(address => string) public adminNames;
     mapping(address => uint256) public adminEmployeeIds;
@@ -46,35 +76,55 @@ contract Payroll {
     mapping(address => AdminRequest) public adminRequests;
     mapping(address => EmployeeRequest) public employeeRequests;
     mapping(address => string) public employeeDataHashes;
-    mapping(address => mapping(uint256 => SalaryRecord)) public employeeSalaries; // employee => month => record
-    mapping(address => uint256[]) public employeeSalaryMonths; // Track months with records
+    mapping(address => mapping(uint256 => SalaryRecord)) public employeeSalaries;
+    mapping(address => mapping(uint256 => Payslip)) public payslips;
+    mapping(address => uint256[]) public employeeSalaryMonths;
+    TaxSlab[] public taxSlabs;
 
-    event EmployeeRegistered(address indexed employee, string ipfsHash);
-    event EmployeeApproved(address indexed employee);
+    // New mappings
+    mapping(address => EmployeeOnChainData) public employeeOnChainData;
+
+    // Events
+    event EmployeeRegistered( address indexed employee, string fullName, uint256 employeeId, string email, string ipfsHash, bool approved, bool exists);
+    event EmployeeApproved(address indexed employee, uint256 annualSalary);
     event EmployeeRejected(address indexed employee);
     event AdminRequested(address indexed adminAddress, string name, uint256 employeeId, string email);
     event AdminApproved(address indexed adminAddress);
     event AdminRejected(address indexed adminAddress);
-    event PayslipGenerated(
-        address indexed employee,
-        uint256 yearMonth,
-        string ipfsHash
-    );
-    
+    event SalaryAdded(address indexed employee, uint256 yearMonth, uint256 netAmount);
+    event PayslipGenerated(address indexed employee, uint256 yearMonth, string ipfsHash);
+    event PayrollRecordAdded(uint256 indexed recordId, address indexed employee);
+    event AccessGranted(uint256 indexed recordId, address indexed employee);
+    event AccessRevoked(uint256 indexed recordId, address indexed employee);
+    event SalaryUpdated(address indexed employee, uint256 newAnnualSalary);
 
+    modifier onlyAdmin() {
+        require(admins[msg.sender] || msg.sender == owner, "Not authorized");
+        _;
+    }
 
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Not owner");
+        _;
+    }
 
     constructor() {
         owner = msg.sender;
+        taxSlabs.push(TaxSlab(0, 1000 ether, 10));
+        taxSlabs.push(TaxSlab(1000 ether, 5000 ether, 20));
+        taxSlabs.push(TaxSlab(5000 ether, type(uint256).max, 30));
     }
 
+    // Admin Functions
     function verifyOwner(address _address) external view returns (bool) {
         return _address == owner;
     }
 
     function requestAdminRole(string memory _name, uint256 _employeeId, string memory _email) external {
-        require(!admins[msg.sender], "You are already an admin.");
-        require(!adminRequests[msg.sender].approved, "You have already submitted a request.");
+        require(!admins[msg.sender], "Already an admin");
+        require(bytes(_name).length > 0, "Name required");
+        require(_employeeId > 0, "Invalid employee ID");
+        require(bytes(_email).length > 0, "Email required");
 
         adminRequests[msg.sender] = AdminRequest({
             name: _name,
@@ -87,22 +137,195 @@ contract Payroll {
         emit AdminRequested(msg.sender, _name, _employeeId, _email);
     }
 
-    function isAdmin(address _address) external view returns (bool) {
-        return admins[_address];
-    }
-
-    function approveAdmin(address _adminAddress) external {
-        require(msg.sender == owner, "Only owner can approve admins.");
-        require(adminRequests[_adminAddress].employeeId != 0, "No request found.");
-        require(!adminRequests[_adminAddress].approved, "Already approved.");
-
+    function approveAdmin(address _adminAddress) external onlyOwner {
+        require(!adminRequests[_adminAddress].approved, "Already approved");
+        
         admins[_adminAddress] = true;
         adminNames[_adminAddress] = adminRequests[_adminAddress].name;
         adminEmployeeIds[_adminAddress] = adminRequests[_adminAddress].employeeId;
         adminEmails[_adminAddress] = adminRequests[_adminAddress].email;
         adminRequests[_adminAddress].approved = true;
 
-        // Remove from pendingAdmins
+        _removeFromPendingAdmins(_adminAddress);
+        approvedAdmins.push(_adminAddress);
+        emit AdminApproved(_adminAddress);
+    }
+
+    function rejectAdmin(address _adminAddress) external onlyOwner {
+        require(!adminRequests[_adminAddress].approved, "Already approved");
+        _removeFromPendingAdmins(_adminAddress);
+        delete adminRequests[_adminAddress];
+        emit AdminRejected(_adminAddress);
+    }
+
+    // Employee Functions
+    function registerEmployee(
+        string memory _fullName,
+        uint256 _employeeId,
+        string memory _email,
+        string memory _ipfsHash
+    ) external {
+        require(!employeeRequests[msg.sender].exists, "Already registered");
+        require(bytes(_fullName).length > 0, "Name required");
+        require(_employeeId > 0, "Invalid employee ID");
+        require(bytes(_email).length > 0, "Email required");
+        require(bytes(_ipfsHash).length > 0, "IPFS hash required");
+
+        employeeRequests[msg.sender] = EmployeeRequest({
+            name: _fullName,
+            employeeId: _employeeId,
+            email: _email,
+            ipfsHash: _ipfsHash,
+            approved: false,
+            exists: true
+        });
+
+        pendingEmployees.push(msg.sender);
+    
+        // Emit all relevant data
+        emit EmployeeRegistered(
+            msg.sender,
+            _fullName,
+            _employeeId,
+            _email,
+            _ipfsHash,
+            false, // approved
+            true   // exists
+        );
+    }
+
+    function approveEmployee(
+        address employee,
+        uint256 annualSalary
+    ) external onlyAdmin {
+        require(!employeeRequests[employee].approved, "Already approved");
+        
+        (uint256 monthly, uint256 tax, uint256 ni, uint256 net) = calculateSalaryComponents(annualSalary);
+        
+        EmployeeOnChainData storage data = employeeOnChainData[employee];
+        data.annualSalary = annualSalary;
+        data.monthlySalary = monthly;
+        data.taxAmount = tax;
+        data.niAmount = ni;
+        data.netSalary = net;
+        data.startDate = block.timestamp;
+
+        employeeRequests[employee].approved = true;
+        approvedEmployees.push(employee);
+        _removeFromPendingEmployees(employee);
+        
+        emit EmployeeApproved(employee, annualSalary);
+    }
+
+    function rejectEmployee(address employee) external onlyAdmin {
+        require(!employeeRequests[employee].approved, "Already approved");
+        _removeFromPendingEmployees(employee);
+        delete employeeRequests[employee];
+        emit EmployeeRejected(employee);
+    }
+
+    function updateEmployeeIPFSHash(address employee, string memory ipfsHash) public onlyAdmin {
+        employeeRequests[employee].ipfsHash = ipfsHash;
+    }
+
+    function calculateSalaryComponents(uint256 annualSalary) public pure returns (
+        uint256 monthly,
+        uint256 tax,
+        uint256 ni,
+        uint256 net
+    ) {
+        monthly = annualSalary / 12;
+        tax = (monthly * TAX_RATE) / 100;
+        ni = (monthly * NI_RATE) / 100;
+        net = monthly - tax - ni;
+        return (monthly, tax, ni, net);
+    }
+
+    function getEmployeeSalaryDetails(address employee) public view returns (
+        uint256 annual,
+        uint256 monthly,
+        uint256 tax,
+        uint256 ni,
+        uint256 net
+    ) {
+        EmployeeOnChainData memory data = employeeOnChainData[employee];
+        return (
+            data.annualSalary,
+            data.monthlySalary,
+            data.taxAmount,
+            data.niAmount,
+            data.netSalary
+        );
+    }
+
+    // Payroll Functions
+    function addSalary(
+        address employee,
+        uint256 yearMonth,
+        uint256 grossSalary
+    ) external onlyAdmin {
+        require(!employeeSalaries[employee][yearMonth].paid, "Salary exists");
+        require(grossSalary > 0, "Invalid salary amount");
+
+        uint256 tax = calculateTax(grossSalary);
+        uint256 ni = (grossSalary * NI_RATE) / 100;
+        uint256 netSalary = grossSalary - tax - ni;
+
+        employeeSalaries[employee][yearMonth] = SalaryRecord({
+            grossAmount: grossSalary,
+            taxAmount: tax,
+            niAmount: ni,
+            netAmount: netSalary,
+            timestamp: block.timestamp,
+            paid: true
+        });
+
+        employeeSalaryMonths[employee].push(yearMonth);
+        emit SalaryAdded(employee, yearMonth, netSalary);
+    }
+
+    function setPayslipCID(
+        address employee,
+        uint256 yearMonth,
+        string calldata ipfsHash
+    ) external onlyAdmin {
+        require(employeeSalaries[employee][yearMonth].timestamp != 0, "Salary not found");
+        payslips[employee][yearMonth] = Payslip(ipfsHash, true);
+        emit PayslipGenerated(employee, yearMonth, ipfsHash);
+    }
+
+    // Helper Functions
+    function calculateTax(uint256 grossSalary) public view returns (uint256) {
+        for (uint i = 0; i < taxSlabs.length; i++) {
+            if (grossSalary >= taxSlabs[i].min && grossSalary < taxSlabs[i].max) {
+                return (grossSalary * taxSlabs[i].rate) / 100;
+            }
+        }
+        return 0;
+    }
+
+    function addPayrollRecord(uint256 recordId, string memory ipfsHash, address employee) public onlyAdmin {
+        require(bytes(ipfsHash).length > 0, "IPFS hash required");
+        require(employee != address(0), "Invalid employee address");
+        
+        payrollRecords[recordId] = PayrollRecord(ipfsHash, employee, msg.sender);
+        emit PayrollRecordAdded(recordId, employee);
+    }
+
+    function grantAccess(uint256 recordId, address employee) public {
+        require(payrollRecords[recordId].employer == msg.sender, "Not employer");
+        accessPermissions[employee][recordId] = true;
+        emit AccessGranted(recordId, employee);
+    }
+
+    function revokeAccess(uint256 recordId, address employee) public {
+        require(payrollRecords[recordId].employer == msg.sender, "Not employer");
+        accessPermissions[employee][recordId] = false;
+        emit AccessRevoked(recordId, employee);
+    }
+
+    // Private Functions
+    function _removeFromPendingAdmins(address _adminAddress) private {
         for (uint i = 0; i < pendingAdmins.length; i++) {
             if (pendingAdmins[i] == _adminAddress) {
                 pendingAdmins[i] = pendingAdmins[pendingAdmins.length - 1];
@@ -110,175 +333,29 @@ contract Payroll {
                 break;
             }
         }
+    }
 
-        // Add to approvedAdmins
-        approvedAdmins.push(_adminAddress);
-        emit AdminApproved(_adminAddress);
+    function _removeFromPendingEmployees(address employee) private {
+        for (uint i = 0; i < pendingEmployees.length; i++) {
+            if (pendingEmployees[i] == employee) {
+                pendingEmployees[i] = pendingEmployees[pendingEmployees.length - 1];
+                pendingEmployees.pop();
+                break;
+            }
+        }
+    }
+
+    // View Functions
+    function isAdmin(address _address) external view returns (bool) {
+        return admins[_address];
     }
 
     function getPendingAdmins() external view returns (address[] memory) {
         return pendingAdmins;
     }
 
-    function rejectAdmin(address _adminAddress) external {
-        require(msg.sender == owner, "Only owner can reject admins.");
-        require(adminRequests[_adminAddress].employeeId != 0, "No request found for this address.");
-        require(!adminRequests[_adminAddress].approved, "Request already approved.");
-
-        for (uint i = 0; i < pendingAdmins.length; i++) {
-            if (pendingAdmins[i] == _adminAddress) {
-                pendingAdmins[i] = pendingAdmins[pendingAdmins.length - 1];
-                pendingAdmins.pop();
-                break;
-            }
-        }
-
-        delete adminRequests[_adminAddress];
-    }
-
     function getApprovedAdmins() external view returns (address[] memory) {
-        return approvedAdmins; // Now returns the dedicated list
-    }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    // Add salary record + auto-calculate deductions
-    function addSalaryRecord(
-        address employee,
-        uint256 yearMonth, // Format: YYYYMM (e.g., 202312 for Dec 2023)
-        uint256 grossSalary
-    ) external onlyAdmin {
-        require(!employeeSalaries[employee][yearMonth].paid, "Salary already recorded");
-
-        (uint256 tax, uint256 ni) = _calculateDeductions(grossSalary);
-        uint256 netSalary = grossSalary - tax - ni;
-
-        employeeSalaries[employee][yearMonth] = SalaryRecord({
-            grossSalary: grossSalary,
-            netSalary: netSalary,
-            taxAmount: tax,
-            niAmount: ni,
-            timestamp: block.timestamp,
-            paid: false
-        });
-
-        employeeSalaryMonths[employee].push(yearMonth);
-    }
-
-    // Internal: Calculate tax and NI
-    function _calculateDeductions(uint256 gross) internal pure returns (uint256 tax, uint256 ni) {
-        tax = (gross * TAX_RATE) / 100;
-        ni = (gross * NI_RATE) / 100;
-        return (tax, ni);
-    }
-
-    // Get salary history for an employee
-    function getSalaryHistory(address employee) external view returns (SalaryRecord[] memory) {
-        uint256[] memory months = employeeSalaryMonths[employee];
-        SalaryRecord[] memory history = new SalaryRecord[](months.length);
-
-        for (uint256 i = 0; i < months.length; i++) {
-            history[i] = employeeSalaries[employee][months[i]];
-        }
-        return history;
-    }
-    function generatePayslipIPFS(
-        address employee,
-        uint256 yearMonth,
-        string calldata ipfsHash
-    ) external onlyAdmin {
-        require(employeeSalaries[employee][yearMonth].timestamp != 0, "Salary record not found");
-        emit PayslipGenerated(employee, yearMonth, ipfsHash);
-    }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    function registerEmployee(string memory ipfsHash) external {
-        require(!employeeRequests[msg.sender].approved, "Employee already registered.");
-        require(bytes(ipfsHash).length > 0, "IPFS hash cannot be empty.");
-
-        employeeRequests[msg.sender] = EmployeeRequest({
-            ipfsHash: ipfsHash,
-            approved: false
-        });
-
-        pendingEmployees.push(msg.sender);
-        emit EmployeeRegistered(msg.sender, ipfsHash);
-    }
-
-    function approveEmployee(address employee) external {
-        require(admins[msg.sender], "Only admin can approve employees.");
-        require(!employeeRequests[employee].approved, "Employee already approved.");
-        require(bytes(employeeRequests[employee].ipfsHash).length > 0, "No request found for this employee.");
-
-        employeeRequests[employee].approved = true;
-        employeeDataHashes[employee] = employeeRequests[employee].ipfsHash;
-        approvedEmployees.push(employee);
-
-        for (uint i = 0; i < pendingEmployees.length; i++) {
-            if (pendingEmployees[i] == employee) {
-                pendingEmployees[i] = pendingEmployees[pendingEmployees.length - 1];
-                pendingEmployees.pop();
-                break;
-            }
-        }
-
-        emit EmployeeApproved(employee);
-    }
-
-    function rejectEmployee(address employee) external {
-        require(admins[msg.sender], "Only admin can reject employees.");
-        require(!employeeRequests[employee].approved, "Employee already approved.");
-
-        for (uint i = 0; i < pendingEmployees.length; i++) {
-            if (pendingEmployees[i] == employee) {
-                pendingEmployees[i] = pendingEmployees[pendingEmployees.length - 1];
-                pendingEmployees.pop();
-                break;
-            }
-        }
-
-        delete employeeRequests[employee];
-        emit EmployeeRejected(employee);
+        return approvedAdmins;
     }
 
     function getPendingEmployees() external view returns (address[] memory) {
@@ -293,21 +370,8 @@ contract Payroll {
         return employeeRequests[employee];
     }
 
-    modifier onlyEmployer(uint256 recordId) {
-        require(payrollRecords[recordId].employer == msg.sender, "Not the employer");
-        _;
-    }
-
-    function addPayrollRecord(uint256 recordId, string memory ipfsHash, address employee) public {
-        payrollRecords[recordId] = PayrollRecord(ipfsHash, employee, msg.sender);
-    }
-
-    function grantAccess(uint256 recordId, address employee) public onlyEmployer(recordId) {
-        accessPermissions[employee][recordId] = true;
-    }
-
-    function revokeAccess(uint256 recordId, address employee) public onlyEmployer(recordId) {
-        accessPermissions[employee][recordId] = false;
+    function getSalaryMonths(address employee) external view returns (uint256[] memory) {
+        return employeeSalaryMonths[employee];
     }
 
     function getPayrollRecord(uint256 recordId) public view returns (string memory) {

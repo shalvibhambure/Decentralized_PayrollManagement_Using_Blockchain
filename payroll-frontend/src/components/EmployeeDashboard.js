@@ -1,144 +1,67 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import detectEthereumProvider from '@metamask/detect-provider';
-import { registerEmployee } from '../utils/contract'; // Use registerEmployee instead of requestEmployeeRole
-import { TextField, Button, CircularProgress, Snackbar, Alert, Box, Typography } from '@mui/material';
+import React, { useState, useEffect } from 'react';
+import { fetchFromIPFS } from '../utils/ipfs';
+import { getContract } from '../utils/metamask-utils';
+import PayrollABI from '../contracts/Payroll.json';
+import Web3 from 'web3'; 
 
-const EmployeeDashboard = () => {
-  const navigate = useNavigate();
-  const [name, setName] = useState('');
-  const [employeeId, setEmployeeId] = useState('');
-  const [address, setAddress] = useState('');
-  const [bankAccount, setBankAccount] = useState('');
+const contractAddress = '0xef5e2be84aC41491A64166c6489E057d3CF085cB';
+
+const EmployeeDashboard = ({ account }) => {
+  const [employeeData, setEmployeeData] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [isSubmitted, setIsSubmitted] = useState(false);
-  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-
-    const provider = await detectEthereumProvider();
-
-    if (provider) {
+  useEffect(() => {
+    const fetchData = async () => {
       try {
-        const accounts = await provider.request({ method: 'eth_requestAccounts' });
-
-        if (accounts.length > 0) {
-          const walletAddress = accounts[0];
-
-          // Check if the user is on the correct network
-          const chainId = await provider.request({ method: 'eth_chainId' });
-          const expectedChainId = '1337'; // Replace with your network's chain ID
-
-          if (chainId !== expectedChainId) {
-            setError(`Please switch to the correct network (Chain ID: ${expectedChainId}).`);
-            return;
-          }
-
-          // Prepare employee data
-          const employeeData = {
-            name,
-            employeeId,
-            address,
-            bankAccount,
-          };
-
-          // Upload employee data to IPFS
-          const ipfsHash = JSON.stringify(employeeData); // Replace with actual IPFS upload logic if needed
-
-          // Register employee with the IPFS hash
-          await registerEmployee(ipfsHash);
-
-          setIsSubmitted(true);
-          setError('');
-        } else {
-          setError('No accounts found. Please create or unlock an account in MetaMask.');
+        if (!account) {
+          throw new Error('No wallet connected');
         }
-      } catch (error) {
-        console.error('Error connecting to MetaMask:', error);
-        if (error.code === 4001) {
-          setError('User denied account access.');
+
+        const web3 = new Web3(window.ethereum);
+        const contract = getContract(web3, PayrollABI, contractAddress);
+        
+        const record = await contract.methods.employeeRequests(account).call();
+        
+        if (record.ipfsHash) {
+          const ipfsData = await fetchFromIPFS(record.ipfsHash);
+          setEmployeeData({
+            ...record,
+            ...ipfsData
+          });
         } else {
-          setError('Failed to connect to MetaMask. Please try again.');
+          setEmployeeData(record);
         }
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
       }
-    } else {
-      setError('Please install MetaMask to use this application.');
-    }
-    setLoading(false);
-  };
+    };
+
+    fetchData();
+  }, [account]);
+
+  if (loading) return <div>Loading...</div>;
+  if (error) return <div>Error: {error}</div>;
+  if (!employeeData) return <div>No employee data found</div>;
 
   return (
-    <Box style={styles.container}>
-      <Typography variant="h4" gutterBottom>
-        Employee Registration
-      </Typography>
-      <form onSubmit={handleSubmit} style={styles.form}>
-        <TextField
-          label="Name"
-          variant="outlined"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          fullWidth
-          required
-        />
-        <TextField
-          label="Employee ID"
-          variant="outlined"
-          value={employeeId}
-          onChange={(e) => setEmployeeId(e.target.value)}
-          fullWidth
-          required
-        />
-        <TextField
-          label="Address"
-          variant="outlined"
-          value={address}
-          onChange={(e) => setAddress(e.target.value)}
-          fullWidth
-          required
-        />
-        <TextField
-          label="Bank Account Number"
-          variant="outlined"
-          value={bankAccount}
-          onChange={(e) => setBankAccount(e.target.value)}
-          fullWidth
-          required
-        />
-        <Button
-          type="submit"
-          variant="contained"
-          color="primary"
-          disabled={isSubmitted || loading}
-        >
-          {loading ? <CircularProgress size={24} /> : isSubmitted ? 'Request Submitted' : 'Submit Request'}
-        </Button>
-      </form>
-      {error && (
-        <Snackbar open={!!error} autoHideDuration={6000} onClose={() => setError('')}>
-          <Alert severity="error">{error}</Alert>
-        </Snackbar>
-      )}
-    </Box>
+    <div className="dashboard">
+      <h2>Employee Dashboard</h2>
+      <div>
+        <p>Name: {employeeData.name || employeeData.fullName}</p>
+        <p>Employee ID: {employeeData.employeeId}</p>
+        <p>Email: {employeeData.email}</p>
+        {employeeData.bankName && (
+          <>
+            <p>Bank: {employeeData.bankName}</p>
+            <p>Account: {employeeData.accountNumber}</p>
+          </>
+        )}
+      </div>
+    </div>
   );
-};
-
-const styles = {
-  container: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '20px',
-  },
-  form: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '10px',
-    width: '400px',
-  },
 };
 
 export default EmployeeDashboard;
