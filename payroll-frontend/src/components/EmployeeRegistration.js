@@ -16,7 +16,7 @@ import { uploadToIPFS } from '../utils/ipfs';
 import Web3 from 'web3';
 import PayrollABI from '../contracts/Payroll.json';
 
-const contractAddress = '0xef5e2be84aC41491A64166c6489E057d3CF085cB';
+const contractAddress = '0xa78Bc2aaE615F1F03E6643f71b291cfDd2FA8B84';
 
 const EmployeeRegistration = () => {
   const [formData, setFormData] = useState({
@@ -72,13 +72,6 @@ const EmployeeRegistration = () => {
         const web3 = new Web3(window.ethereum);
         const contract = getContract(web3, PayrollABI.abi, contractAddress);
         
-        console.log(
-          formData.fullName,
-          formData.employeeId,
-          formData.email,
-          response.cid,
-          response
-        )
         // 3. Send transaction
         await contract.methods.registerEmployee(
           formData.fullName,

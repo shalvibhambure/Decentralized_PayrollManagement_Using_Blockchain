@@ -8,7 +8,7 @@ import Payroll from '../contracts/Payroll.json'; // For Truffle
 import { connectMetaMask } from '../utils/metamask-utils';
 // import Payroll from '../payroll-smart-contract/artifacts/contracts/Payroll.sol/Payroll.json'; // For Hardhat
 
-const contractAddress = '0xef5e2be84aC41491A64166c6489E057d3CF085cB'; // Replace with your contract address
+const contractAddress = '0xa78Bc2aaE615F1F03E6643f71b291cfDd2FA8B84'; // Replace with your contract address
 
 const OwnerDashboard = () => {
   const [pendingAdmins, setPendingAdmins] = useState([]);

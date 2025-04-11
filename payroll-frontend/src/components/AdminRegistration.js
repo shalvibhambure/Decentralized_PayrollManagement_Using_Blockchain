@@ -15,7 +15,7 @@ import { uploadToIPFS } from '../utils/ipfs';
 import PayrollABI from '../contracts/Payroll.json';
 import Web3 from 'web3';
 
-const contractAddress = '0xef5e2be84aC41491A64166c6489E057d3CF085cB';
+const contractAddress = '0xa78Bc2aaE615F1F03E6643f71b291cfDd2FA8B84';
 
 const AdminRegistration = () => {
   const [formData, setFormData] = useState({

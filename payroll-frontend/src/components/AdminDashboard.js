@@ -6,7 +6,7 @@ import Web3 from 'web3';
 import PayrollABI from '../contracts/Payroll.json';
 import { connectMetaMask } from '../utils/metamask-utils';
 
-const contractAddress = '0xef5e2be84aC41491A64166c6489E057d3CF085cB';
+const contractAddress = '0xa78Bc2aaE615F1F03E6643f71b291cfDd2FA8B84';
 
 const AdminDashboard = () => {
   const [web3, setWeb3] = useState(null);
@@ -152,13 +152,14 @@ const AdminDashboard = () => {
   }, [contract, initializeWeb3]);
 
   // View employee details
+  // Update your handleViewDetails function
   const handleViewDetails = async (employee) => {
     try {
       setLoading(true);
       setError('');
-      
+    
       const contractData = await contract.methods.employeeRequests(employee.address).call();
-      
+    
       let ipfsData = {};
       if (contractData.ipfsHash && isIpfsCid(contractData.ipfsHash)) {
         try {
@@ -167,20 +168,18 @@ const AdminDashboard = () => {
           console.warn("IPFS fetch failed:", ipfsError);
         }
       }
-  
-      const details = {
+
+      setEmployeeDetails({
         ...contractData,
         ...ipfsData,
         address: employee.address,
         id: contractData.employeeId.toString()
-      };
-  
-      setEmployeeDetails(details);
+      });
       setOpenDialog(true);
     } catch (err) {
       setError(err.message);
     } finally {
-      setLoading(false);
+      setLoading(false); // Make sure to always set loading to false
     }
   };
 
@@ -229,20 +228,21 @@ const AdminDashboard = () => {
   };
 
   // Reject employee
+  // Update your handleReject function
   const handleReject = async (employeeAddress) => {
     try {
       setLoading(true);
       if (!contract) throw new Error('Contract not initialized');
-      
+    
       await contract.methods.rejectEmployee(employeeAddress)
         .send({ from: account });
-      
+    
       setSuccess('Employee rejected!');
       await loadPendingEmployees();
-    } catch (err) {
+  } catch (err) {
       setError(err.message);
     } finally {
-      setLoading(false);
+      setLoading(false); // Ensure loading is always reset
     }
   };
 
@@ -293,22 +293,34 @@ const AdminDashboard = () => {
                     <TableCell>{employee.name}</TableCell>
                     <TableCell>{employee.email}</TableCell>
                     <TableCell>
-                      <Button 
-                        variant="contained"
-                        onClick={() => handleViewDetails(employee)}
-                        disabled={loading}
-                        sx={{ mr: 1 }}
-                      >
-                        View Details
-                      </Button>
-                      <Button 
-                        variant="contained"
-                        color="error"
-                        onClick={() => handleReject(employee.address)}
-                        disabled={loading}
-                      >
-                        Reject
-                      </Button>
+                    <Button 
+                      variant="contained"
+                      onClick={() => handleViewDetails(employee)}
+                      disabled={loading}
+                      sx={{ 
+                        mr: 1,
+                        '&:disabled': {
+                          opacity: 0.7,
+                          cursor: 'not-allowed'
+                        }
+                      }}
+                    >
+                      View Details
+                    </Button>
+                    <Button 
+                      variant="contained"
+                      color="error"
+                      onClick={() => handleReject(employee.address)}
+                      disabled={loading}
+                      sx={{
+                        '&:disabled': {
+                          opacity: 0.7,
+                          cursor: 'not-allowed'
+                        }
+                      }}
+                    >
+                      Reject
+                    </Button>
                     </TableCell>
                   </TableRow>
                 ))}

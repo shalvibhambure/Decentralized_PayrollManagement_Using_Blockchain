@@ -181,17 +181,8 @@ contract Payroll {
         });
 
         pendingEmployees.push(msg.sender);
-    
         // Emit all relevant data
-        emit EmployeeRegistered(
-            msg.sender,
-            _fullName,
-            _employeeId,
-            _email,
-            _ipfsHash,
-            false, // approved
-            true   // exists
-        );
+        emit EmployeeRegistered(msg.sender,_fullName,_employeeId,_email,_ipfsHash,false,true);
     }
 
     function approveEmployee(
