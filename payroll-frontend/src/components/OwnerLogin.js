@@ -7,7 +7,7 @@ import { connectMetaMask } from '../utils/metamask-utils';
 // Replace with your contract ABI and address
 import Payroll from '../contracts/Payroll.json'; // For Truffle
 // import Payroll from '../payroll-smart-contract/artifacts/contracts/Payroll.sol/Payroll.json'; // For Hardhat
-const contractAddress = '0xa78Bc2aaE615F1F03E6643f71b291cfDd2FA8B84'; // Replace with your contract address
+const contractAddress = '0xFf38A88263E8248497883fF0a5F808bD286DAa5B'; // Replace with your contract address
 
 const OwnerLogin = () => {
   const [error, setError] = useState('');

@@ -6,7 +6,7 @@ import Web3 from 'web3';
 import PayrollABI from '../contracts/Payroll.json';
 import { connectMetaMask } from '../utils/metamask-utils';
 
-const contractAddress = '0xa78Bc2aaE615F1F03E6643f71b291cfDd2FA8B84';
+const contractAddress = '0xFf38A88263E8248497883fF0a5F808bD286DAa5B';
 
 const AdminDashboard = () => {
   const [web3, setWeb3] = useState(null);
@@ -184,9 +184,9 @@ const AdminDashboard = () => {
   };
 
   // Calculate salary preview in pounds
-  const calculateSalaryPreview = () => {
-    if (!annualSalary || isNaN(annualSalary)) return;
-    const salary = parseFloat(annualSalary);
+  const calculateSalaryPreview = (annualSalary1) => {
+    if (!annualSalary1 || isNaN(annualSalary1)) return;
+    const salary = parseFloat(annualSalary1);
     const monthly = salary / 12;
     const tax = (monthly * 20) / 100;
     const ni = (monthly * 12) / 100;
@@ -253,16 +253,20 @@ const AdminDashboard = () => {
 
   // Initialize component
   useEffect(() => {
-    const initialize = async () => {
-      const contractInstance = await initializeWeb3();
-      if (!contractInstance) return;
-      
-      await loadPendingEmployees();
-      await loadApprovedEmployees();
+    const init = async () => {
+      try {
+        const contract = await initializeWeb3();
+        await loadPendingEmployees(contract);
+        await loadApprovedEmployees(contract);
+      } catch (err) {
+        console.error("Dashboard init error:", err.message);
+      }
     };
-
-    initialize();
-  }, [initializeWeb3, loadPendingEmployees, loadApprovedEmployees]);
+  
+    init();
+  }, []);
+  
+  
 
   return (
     <Box sx={{ p: 3 }}>
@@ -394,8 +398,9 @@ const AdminDashboard = () => {
                     margin="normal"
                     value={annualSalary}
                     onChange={(e) => {
-                      setAnnualSalary(e.target.value);
-                      calculateSalaryPreview();
+                      const value = e.target.value;
+                      setAnnualSalary(value);
+                      calculateSalaryPreview(value);
                     }}
                     type="number"
                     inputProps={{ step: "0.01" }}

@@ -16,7 +16,7 @@ import { uploadToIPFS } from '../utils/ipfs';
 import Web3 from 'web3';
 import PayrollABI from '../contracts/Payroll.json';
 
-const contractAddress = '0xa78Bc2aaE615F1F03E6643f71b291cfDd2FA8B84';
+const contractAddress = '0xFf38A88263E8248497883fF0a5F808bD286DAa5B';
 
 const EmployeeRegistration = () => {
   const [formData, setFormData] = useState({
@@ -57,22 +57,21 @@ const EmployeeRegistration = () => {
   
     try {
       // Validate form
-      if (!formData.fullName || !formData.employeeId || !formData.email) {
+      if (!formData.fullName || !formData.employeeId || !formData.email ) {
         throw new Error('Please fill all fields');
       }
 
-      // 1. Upload to IPFS
       const response = await uploadToIPFS({
         ...formData,
-        timestamp: new Date().toISOString()
+        role: 'employee',
+        registrationDate: new Date().toISOString()
       });
-
+      
       if (response.success) {
-        // 2. Initialize contract
+
         const web3 = new Web3(window.ethereum);
         const contract = getContract(web3, PayrollABI.abi, contractAddress);
-        
-        // 3. Send transaction
+
         await contract.methods.registerEmployee(
           formData.fullName,
           formData.employeeId,
@@ -81,7 +80,7 @@ const EmployeeRegistration = () => {
         ).send({ from: account });
     
         setSuccess('Registration successful!');
-        setTimeout(() => navigate('/employee-dashboard'), 2000);
+        //setTimeout(() => navigate('/employee-dashboard'), 2000);
       } else {
         setError(response.message);
       }

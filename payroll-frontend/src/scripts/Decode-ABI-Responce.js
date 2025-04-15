@@ -1,29 +1,28 @@
 import Web3 from 'web3';
-
 const web3 = new Web3('http://127.0.0.1:7545');
 
-// The encoded result you provided represents an empty array
-const encodedResult = "0x00000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000000";
+// 1. Get real encoded data from contract call
+const encodedData = await web3.eth.call({
+  to: "0xFf38A88263E8248497883fF0a5F808bD286DAa5B",
+  data: web3.eth.abi.encodeFunctionCall({
+    name: "getPendingEmployees",
+    type: "function",
+    inputs: []
+  }, [])
+});
 
-// For array types, you need to provide the full ABI definition
+// 2. Decode properly
 const abi = {
-      "name": "getPendingEmployees",
-      "outputs": [
-        {
-          "internalType": "address[]",
-          "name": "",
-          "type": "address[]"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function",
-      "constant": true
+  "inputs": [],
+  "name": "getPendingEmployees",
+  "outputs": [{"type": "address[]"}],
+  "stateMutability": "view",
+  "type": "function"
 };
 
-try {
-    // Decode using the full ABI definition
-    const decoded = web3.eth.abi.decodeParameter(abi.outputs[0].type, encodedResult);
-    console.log(decoded); // Should show an empty array []
-} catch (error) {
-    console.error("Decoding failed:", error);
-}
+const decoded = web3.eth.abi.decodeParameters(
+  abi.outputs, 
+  encodedData
+)[0];
+
+console.log(decoded); // Will show [] or actual addresses

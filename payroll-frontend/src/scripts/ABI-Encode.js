@@ -7,7 +7,7 @@ import PayrollABI from '../contracts/Payroll.json' with { type: 'json' };
 const web3 = new Web3('http://127.0.0.1:7545'); // Ganache RPC URL
 
 // Your contract address
-const contractAddress = '0xa78Bc2aaE615F1F03E6643f71b291cfDd2FA8B84';
+const contractAddress = '0xFf38A88263E8248497883fF0a5F808bD286DAa5B';
 
 // Create a contract instance
 const contract = new web3.eth.Contract(PayrollABI.abi, contractAddress);

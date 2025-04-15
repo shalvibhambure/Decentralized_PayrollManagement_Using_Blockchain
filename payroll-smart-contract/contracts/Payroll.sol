@@ -85,7 +85,7 @@ contract Payroll {
     mapping(address => EmployeeOnChainData) public employeeOnChainData;
 
     // Events
-    event EmployeeRegistered( address indexed employee, string fullName, uint256 employeeId, string email, string ipfsHash, bool approved, bool exists);
+    event EmployeeRegistered( address indexed employee, string fullName, uint256 employeeId, string email);
     event EmployeeApproved(address indexed employee, uint256 annualSalary);
     event EmployeeRejected(address indexed employee);
     event AdminRequested(address indexed adminAddress, string name, uint256 employeeId, string email);
@@ -182,7 +182,7 @@ contract Payroll {
 
         pendingEmployees.push(msg.sender);
         // Emit all relevant data
-        emit EmployeeRegistered(msg.sender,_fullName,_employeeId,_email,_ipfsHash,false,true);
+        emit EmployeeRegistered(msg.sender,_fullName,_employeeId,_email);
     }
 
     function approveEmployee(
