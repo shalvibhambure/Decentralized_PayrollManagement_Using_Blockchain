@@ -9,26 +9,6 @@ const WelcomePage = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  const handleEmployeeLoginClick = async () => {
-    try {
-      if (!window.ethereum) {
-        setError('Please install MetaMask to continue');
-        return;
-      }
-      
-      const { account } = await connectMetaMask();
-      setSuccess(`Connected: ${account.substring(0, 6)}...${account.slice(-4)}`);
-      
-      // Navigate after short delay
-      setTimeout(() => navigate('/employee-login'), 1000);
-    } catch (error) {
-      console.error("MetaMask connection failed:", error);
-      setError(error.message.includes('rejected') 
-        ? 'Connection rejected by user' 
-        : 'Failed to connect to MetaMask');
-    }
-  };
-
   return (
     <Container style={styles.container}>
       <Typography variant="h2" gutterBottom style={styles.title}>
@@ -43,7 +23,8 @@ const WelcomePage = () => {
         <Button
           variant="contained"
           color="primary"
-          onClick={handleEmployeeLoginClick}
+          component={Link}
+          to="/login-employee"
           style={styles.button}
           size="large"
         >

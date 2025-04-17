@@ -2,14 +2,190 @@
 pragma solidity ^0.8.0;
 
 contract Payroll {
+
+    struct Admin {
+        string email;
+        string ipfsHash;
+        bool approved;
+    }
+    struct Employee {
+        string email;
+        string ipfsHash;
+        bool approved;
+    }
+
     address public owner;
+    Admin[] public AdminsList;
+    Employee[] public EmployeeList;
+
+    uint public AdminIterator = 0;
+    uint public EmployeeIterator = 0;
+
+    mapping(address => Admin) public RegisterAdmins;
+    mapping(address => Employee) public RegisterEmployees;
+    mapping(address => uint) public AdminArrayIndex;
+    mapping(address => uint) public EmployeeArrayIndex;
+
+    event AdminRequested(address indexed adminAddress, string email, string ipfsHash);
+    event EmployeeRequested(address indexed employeeAddress, string email, string ipfsHash);
+
+    constructor() {
+        owner = msg.sender;
+    }
+
+    function isOwner(address account) public view returns (bool) {
+        return account == owner;
+    }
+
+    function registerAdmin(string memory email, string memory ipfsHash) public {
+        require(!RegisterAdmins[msg.sender].approved, "Already registered as admin");
+        require(bytes(email).length > 0, "Email required");
+        require(bytes(ipfsHash).length > 0, "IPFS hash required");
+
+        Admin memory newAdmin = Admin({
+            email: email,
+            ipfsHash: ipfsHash,
+            approved: false
+        });
+        RegisterAdmins[msg.sender] = newAdmin;
+
+        AdminsList.push(newAdmin);
+
+        AdminArrayIndex[msg.sender] = AdminIterator;
+        AdminIterator++;
+        emit AdminRequested(msg.sender, email, ipfsHash);
+    }
+
+    function registerEmployee(string memory email, string memory ipfsHash) public {
+        require(!RegisterEmployees[msg.sender].approved, "Already registered as employee");
+        require(bytes(email).length > 0, "Email required");
+        require(bytes(ipfsHash).length > 0, "IPFS hash required");
+        
+        Employee memory newEmployee = Employee({
+            email: email,
+            ipfsHash: ipfsHash,
+            approved: false
+        });
+        RegisterEmployees[msg.sender] = newEmployee;
+
+        EmployeeList.push(newEmployee); 
+        
+        EmployeeArrayIndex[msg.sender] = EmployeeIterator;
+        EmployeeIterator++;
+        emit EmployeeRequested(msg.sender, email, ipfsHash);
+    }
+
+    function approveAdmin(address adminAddress) public {
+        require(msg.sender == owner, "Only owner can approve admins");
+        require(!RegisterAdmins[adminAddress].approved, "Already approved");
+        RegisterAdmins[adminAddress].approved = true;
+        AdminsList[AdminArrayIndex[adminAddress]].approved = true;
+    }
+
+    function rejectAdmin(address adminAddress) public {
+        require(msg.sender == owner, "Only owner can reject admins");
+        require(!RegisterAdmins[adminAddress].approved, "Already approved");
+        RegisterAdmins[adminAddress].approved = false;
+        AdminsList[AdminArrayIndex[adminAddress]].approved = false;
+    }
+
+    function approveEmployee(address employeeAddress) public {
+        require(msg.sender == owner, "Only owner can approve employees");
+        require(!RegisterEmployees[employeeAddress].approved, "Already approved");
+        RegisterEmployees[employeeAddress].approved = true;
+        EmployeeList[EmployeeArrayIndex[employeeAddress]].approved = true;
+    }
+
+    function rejectEmployee(address employeeAddress) public {
+        require(msg.sender == owner, "Only owner can reject employees");
+        require(!RegisterEmployees[employeeAddress].approved, "Already approved");
+        RegisterEmployees[employeeAddress].approved = false;
+        EmployeeList[EmployeeArrayIndex[employeeAddress]].approved = false;
+    }
+
+    function getPendingAdmins() public view returns (Admin[] memory) {
+        uint count = 0;
+        for (uint i = 0; i < AdminsList.length; i++) {
+            if (!AdminsList[i].approved) {
+                count++;
+            }
+        }
+        Admin[] memory pendingAdmins = new Admin[](count);
+        uint index = 0; 
+        for (uint i = 0; i < AdminsList.length; i++) {
+            if (!AdminsList[i].approved) {
+                pendingAdmins[index] = AdminsList[i];
+                index++;
+            }
+        }
+        return pendingAdmins;
+    }
+    function getApprovedAdmins() public view returns (Admin[] memory) {
+        uint count = 0;
+        for (uint i = 0; i < AdminsList.length; i++) {
+            if (AdminsList[i].approved) {
+                count++;
+            }
+        }
+        Admin[] memory approvedAdmins = new Admin[](count);
+        uint index = 0;
+        for (uint i = 0; i < AdminsList.length; i++) {
+            if (AdminsList[i].approved) {
+                approvedAdmins[index] = AdminsList[i];
+                index++;
+            }
+        }
+        return approvedAdmins;
+    }
+
+    function getPendingEmployees() public view returns (Employee[] memory) {
+        uint count = 0;
+        for (uint i = 0; i < EmployeeList.length; i++) {
+            if (!EmployeeList[i].approved) {
+                count++;
+            }
+        }
+        Employee[] memory pendingEmployees = new Employee[](count);
+        uint index = 0;
+        for (uint i = 0; i < EmployeeList.length; i++) {
+            if (!EmployeeList[i].approved) {
+                pendingEmployees[index] = EmployeeList[i];
+                index++;
+            }
+        }
+        return pendingEmployees;
+    }
+    function getApprovedEmployees() public view returns (Employee[] memory) {
+        uint count = 0;
+        for (uint i = 0; i < EmployeeList.length; i++) {
+            if (EmployeeList[i].approved) {
+                count++;
+            }
+        }
+        Employee[] memory approvedEmployees = new Employee[](count);
+        uint index = 0; 
+        for (uint i = 0; i < EmployeeList.length; i++) {
+            if (EmployeeList[i].approved) {
+                approvedEmployees[index] = EmployeeList[i];
+                index++;
+            }
+        }
+        return approvedEmployees;
+    }
+
+
+
+
+
+
+    /*address public owner;
     address[] public pendingAdmins;
     address[] public pendingEmployees;
     address[] public approvedEmployees;
     address[] public approvedAdmins;
     uint256 public constant TAX_RATE = 20;
     uint256 public constant NI_RATE = 12;
-
+    
     // Existing structures
     struct PayrollRecord {
         string ipfsHash;
@@ -86,7 +262,7 @@ contract Payroll {
 
     // Events
     event EmployeeRegistered( address indexed employee, string fullName, uint256 employeeId, string email);
-    event EmployeeApproved(address indexed employee, uint256 annualSalary);
+    event EmployeeApproved(address indexed employee, uint256 annualSalary, string ipfsHash);
     event EmployeeRejected(address indexed employee);
     event AdminRequested(address indexed adminAddress, string name, uint256 employeeId, string email);
     event AdminApproved(address indexed adminAddress);
@@ -186,27 +362,31 @@ contract Payroll {
     }
 
     function approveEmployee(
-        address employee,
-        uint256 annualSalary
-    ) external onlyAdmin {
-        require(!employeeRequests[employee].approved, "Already approved");
-        
-        (uint256 monthly, uint256 tax, uint256 ni, uint256 net) = calculateSalaryComponents(annualSalary);
-        
-        EmployeeOnChainData storage data = employeeOnChainData[employee];
-        data.annualSalary = annualSalary;
-        data.monthlySalary = monthly;
-        data.taxAmount = tax;
-        data.niAmount = ni;
-        data.netSalary = net;
-        data.startDate = block.timestamp;
+    address employee,
+    uint256 annualSalary,
+    string calldata updatedIpfsHash  // Add this parameter
+) external onlyAdmin {
+    require(!employeeRequests[employee].approved, "Already approved");
+    
+    (uint256 monthly, uint256 tax, uint256 ni, uint256 net) = calculateSalaryComponents(annualSalary);
+    
+    EmployeeOnChainData storage data = employeeOnChainData[employee];
+    data.annualSalary = annualSalary;
+    data.monthlySalary = monthly;
+    data.taxAmount = tax;
+    data.niAmount = ni;
+    data.netSalary = net;
+    data.startDate = block.timestamp;
 
-        employeeRequests[employee].approved = true;
-        approvedEmployees.push(employee);
-        _removeFromPendingEmployees(employee);
-        
-        emit EmployeeApproved(employee, annualSalary);
-    }
+    // Update the IPFS hash in the employee request
+    employeeRequests[employee].ipfsHash = updatedIpfsHash;
+    employeeRequests[employee].approved = true;
+    
+    approvedEmployees.push(employee);
+    _removeFromPendingEmployees(employee);
+    
+    emit EmployeeApproved(employee, annualSalary, updatedIpfsHash);
+}
 
     function rejectEmployee(address employee) external onlyAdmin {
         require(!employeeRequests[employee].approved, "Already approved");
@@ -217,6 +397,7 @@ contract Payroll {
 
     function updateEmployeeIPFSHash(address employee, string memory ipfsHash) public onlyAdmin {
         employeeRequests[employee].ipfsHash = ipfsHash;
+        emit EmployeeApproved(employee, employeeOnChainData[employee].annualSalary, ipfsHash); // Emit updated event
     }
 
     function calculateSalaryComponents(uint256 annualSalary) public pure returns (
@@ -305,7 +486,6 @@ contract Payroll {
 
     function grantAccess(uint256 recordId, address employee) public {
         require(payrollRecords[recordId].employer == msg.sender, "Not employer");
-        accessPermissions[employee][recordId] = true;
         emit AccessGranted(recordId, employee);
     }
 
@@ -368,5 +548,5 @@ contract Payroll {
     function getPayrollRecord(uint256 recordId) public view returns (string memory) {
         require(accessPermissions[msg.sender][recordId], "Not authorized");
         return payrollRecords[recordId].ipfsHash;
-    }
+    }*/
 }

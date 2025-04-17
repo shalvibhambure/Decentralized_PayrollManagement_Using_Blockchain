@@ -6,24 +6,17 @@ const pinata = new PinataSDK({
 });
 
 // Simple function to upload string data to IPFS
-export const uploadToIPFS = async (data) => {
+export const uploadToIPFS = async (data, fileName = null) => {
   try {
-    const check = await checkForExistingUser(data.email);
-    if (check) {
-      return {
-        success: false,
-        message: 'User already exists'
-      }
-    } else {
-      const file = new File([JSON.stringify(data)], `${data.email}.txt`);
-      const upload = await pinata.upload.public.file(file);
-      //console.log(upload);
-      return {
-        success: true,
-        cid: upload.cid,
-        url: `https://${process.env.REACT_APP_PINATA_GATEWAY}/ipfs/${upload.cid}`
-      };
-    }
+    fileName = fileName ?? data.metaData.email;
+    const file = new File([JSON.stringify(data)], `${fileName}.txt`);
+    const upload = await pinata.upload.public.file(file);
+    //console.log(upload);
+    return {
+      success: true,
+      cid: upload.cid,
+      url: `https://${process.env.REACT_APP_PINATA_GATEWAY}/ipfs/${upload.cid}`
+    };
   } catch (error) {
     console.error('IPFS upload error:', error);
     throw new Error(`Upload failed: ${error.message}`);
@@ -33,9 +26,11 @@ export const uploadToIPFS = async (data) => {
 // Simple function to fetch string data from IPFS
 export const fetchFromIPFS = async (cid) => {
   try {
+    console.log({cid});
+    if ([null, undefined, ''].includes(cid)) throw new Error(`Invalid CID`);
     const file = await pinata.gateways.public.get(cid);
     // console.log({file});
-    return file.data;
+    return JSON.parse(file.data);
   } catch (error) {
     console.error('IPFS fetch error:', error);
     throw new Error(`Fetch failed: ${error.message}`);

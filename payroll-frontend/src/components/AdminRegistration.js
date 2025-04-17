@@ -11,11 +11,10 @@ import {
   CardContent
 } from '@mui/material';
 import { connectMetaMask, getContract } from '../utils/metamask-utils';
-import { uploadToIPFS } from '../utils/ipfs';
 import PayrollABI from '../contracts/Payroll.json';
 import Web3 from 'web3';
-
-const contractAddress = '0xFf38A88263E8248497883fF0a5F808bD286DAa5B';
+import { contractAddress } from '../constants';
+import { registerUser } from '../libraries/UserLibrary';
 
 const AdminRegistration = () => {
   const [formData, setFormData] = useState({
@@ -53,25 +52,32 @@ const AdminRegistration = () => {
 
     try {
       // 1. Upload to IPFS
-      const response = await uploadToIPFS({
-        ...formData,
-        role: 'admin',
-        registrationDate: new Date().toISOString()
+      const response = await registerUser({
+        metaData: {
+          ...formData,
+          role: 'admin',
+          metaMaskId: account,
+          createdDate: new Date().toISOString()
+        }
       });
 
       if (response.success) {
         // 2. Get contract instance
         const web3 = new Web3(window.ethereum);
         const contract = getContract(web3, PayrollABI.abi, contractAddress);
-  
+        
         // 3. Register admin request
-        await contract.methods.requestAdminRole(
-          formData.name,
-          formData.employeeId,
+        console.log('Registering admin:', formData.email, response.cid);
+        await contract.methods.registerAdmin(
           formData.email,
           response.cid
         ).send({ from: account });
   
+        setFormData({
+          name: '',
+          employeeId: '',
+          email: ''
+        });
         setSuccess('Admin registration request submitted!');
       } else {
         setError(response.message);

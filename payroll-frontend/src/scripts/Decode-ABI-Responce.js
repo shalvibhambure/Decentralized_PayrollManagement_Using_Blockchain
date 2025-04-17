@@ -3,7 +3,7 @@ const web3 = new Web3('http://127.0.0.1:7545');
 
 // 1. Get real encoded data from contract call
 const encodedData = await web3.eth.call({
-  to: "0xFf38A88263E8248497883fF0a5F808bD286DAa5B",
+  to: "0x062D2DFd976A8a5E5DBcEc4FE8c46a782A5f5D91",
   data: web3.eth.abi.encodeFunctionCall({
     name: "getPendingEmployees",
     type: "function",

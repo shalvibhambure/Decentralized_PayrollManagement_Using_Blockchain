@@ -5,8 +5,8 @@ import { fetchFromIPFS, isIpfsCid } from '../utils/ipfs';
 import Web3 from 'web3';
 import PayrollABI from '../contracts/Payroll.json';
 import { connectMetaMask } from '../utils/metamask-utils';
-
-const contractAddress = '0xFf38A88263E8248497883fF0a5F808bD286DAa5B';
+import { uploadToIPFS } from '../utils/ipfs'; // Ensure you have this utility function
+import { contractAddress } from '../constants';
 
 const AdminDashboard = () => {
   const [web3, setWeb3] = useState(null);
@@ -69,7 +69,7 @@ const AdminDashboard = () => {
 
             if (contractData.ipfsHash && contractData.ipfsHash.startsWith('Qm')) {
               try {
-                const ipfsData = await fetchFromIPFS(contractData.ipfsHash);
+                const ipfsData = (await fetchFromIPFS(contractData.ipfsHash)).metaData;
                 return { ...employee, ...ipfsData };
               } catch (ipfsError) {
                 console.warn(`IPFS fetch failed for ${address}:`, ipfsError);
@@ -115,7 +115,7 @@ const AdminDashboard = () => {
             let additionalDetails = {};
             if (result.ipfsHash && !result.ipfsHash.includes('pending')) {
               try {
-                additionalDetails = await fetchFromIPFS(result.ipfsHash);
+                additionalDetails = (await fetchFromIPFS(result.ipfsHash)).metaData;
               } catch (ipfsError) {
                 console.warn(`IPFS fetch failed for ${address}:`, ipfsError);
               }
@@ -163,7 +163,7 @@ const AdminDashboard = () => {
       let ipfsData = {};
       if (contractData.ipfsHash && isIpfsCid(contractData.ipfsHash)) {
         try {
-          ipfsData = await fetchFromIPFS(contractData.ipfsHash);
+          ipfsData = (await fetchFromIPFS(contractData.ipfsHash)).metaData;
         } catch (ipfsError) {
           console.warn("IPFS fetch failed:", ipfsError);
         }
@@ -206,12 +206,50 @@ const AdminDashboard = () => {
       setLoading(true);
       if (!contract || !web3) throw new Error('Contract not initialized');
       
-      // Convert pounds to wei (1 GBP = 1 ETH for simplicity)
+      // 1. Get existing IPFS data
+      let existingData = {};
+      if (employeeDetails.ipfsHash && isIpfsCid(employeeDetails.ipfsHash)) {
+        try {
+          const response = await fetchFromIPFS(employeeDetails.ipfsHash);
+          // Handle both direct data and Pinata response format
+          existingData = typeof response === 'object' ? response.metaData : JSON.parse(response).metaData;
+        } catch (ipfsError) {
+          console.warn("Failed to fetch existing IPFS data:", ipfsError);
+        }
+      }
+  
+      // 2. Prepare updated data with salary details
+      const updatedData = {
+        ...existingData,
+        salaryDetails: {
+          annualSalary: annualSalary,
+          monthlySalary: salaryPreview.monthly,
+          taxRate: "20%",
+          nationalInsuranceRate: "12%",
+          netSalary: salaryPreview.net,
+          approvedOn: new Date().toISOString()
+        },
+        status: "approved"
+      };
+  
+      // 3. Upload updated data using existing uploadToIPFS function
+      const uploadResult = await uploadToIPFS(updatedData);
+      
+      // Handle both direct CID and Pinata response format
+      const newIpfsHash = uploadResult.cid || uploadResult;
+      
+      if (!newIpfsHash) {
+        throw new Error('Failed to get IPFS hash from upload');
+      }
+  
+      // 4. Convert salary to wei
       const salaryInWei = web3.utils.toWei(annualSalary, 'ether');
       
+      // 5. Call contract with updated IPFS hash
       await contract.methods.approveEmployee(
         employeeDetails.address,
-        salaryInWei
+        salaryInWei,
+        newIpfsHash
       ).send({ from: account });
       
       setSuccess('Employee approved with salary!');
@@ -221,7 +259,11 @@ const AdminDashboard = () => {
       setAnnualSalary('');
       setSalaryPreview(null);
     } catch (err) {
-      setError(err.message);
+      // Improved error handling
+      const errorMsg = err.message.includes('string validation') 
+        ? 'Invalid IPFS hash format. Please try again.'
+        : err.message;
+      setError(errorMsg);
     } finally {
       setLoading(false);
     }

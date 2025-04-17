@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { 
   TextField, 
   Button, 
@@ -12,11 +11,10 @@ import {
   CardContent
 } from '@mui/material';
 import { connectMetaMask, getContract } from '../utils/metamask-utils';
-import { uploadToIPFS } from '../utils/ipfs';
 import Web3 from 'web3';
 import PayrollABI from '../contracts/Payroll.json';
-
-const contractAddress = '0xFf38A88263E8248497883fF0a5F808bD286DAa5B';
+import { contractAddress } from '../constants';
+import { registerUser } from '../libraries/UserLibrary';
 
 const EmployeeRegistration = () => {
   const [formData, setFormData] = useState({
@@ -28,8 +26,6 @@ const EmployeeRegistration = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [account, setAccount] = useState('');
-
-  const navigate = useNavigate();
 
   const handleConnect = async () => {
     try {
@@ -61,24 +57,25 @@ const EmployeeRegistration = () => {
         throw new Error('Please fill all fields');
       }
 
-      const response = await uploadToIPFS({
-        ...formData,
-        role: 'employee',
-        registrationDate: new Date().toISOString()
+      const response = await registerUser({
+        metaData: {
+          ...formData,
+          role: 'employee',
+          metaMaskId: account,
+          createdDate: new Date().toISOString()
+        }
       });
       
       if (response.success) {
 
         const web3 = new Web3(window.ethereum);
         const contract = getContract(web3, PayrollABI.abi, contractAddress);
-
-        await contract.methods.registerEmployee(
-          formData.fullName,
-          formData.employeeId,
-          formData.email,
-          response.cid
-        ).send({ from: account });
-    
+        await contract.methods.registerEmployee(formData.email, response.cid).send({ from: account });
+        setFormData({
+          fullName: '',
+          employeeId: '',
+          email: ''
+        });
         setSuccess('Registration successful!');
         //setTimeout(() => navigate('/employee-dashboard'), 2000);
       } else {

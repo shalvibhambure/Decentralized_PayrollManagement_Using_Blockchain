@@ -7,10 +7,11 @@ import { fetchFromIPFS, isIpfsCid } from '../utils/ipfs';
 import Payroll from '../contracts/Payroll.json'; // For Truffle
 import { connectMetaMask } from '../utils/metamask-utils';
 // import Payroll from '../payroll-smart-contract/artifacts/contracts/Payroll.sol/Payroll.json'; // For Hardhat
+import { contractAddress } from '../constants';
+import useAuth from '../hooks/useAuth';
+import { styles } from '../styles';
 
-const contractAddress = '0xFf38A88263E8248497883fF0a5F808bD286DAa5B'; // Replace with your contract address
-
-const OwnerDashboard = () => {
+const OwnerDashboard = ({ walletAddress }) => {
   const [pendingAdmins, setPendingAdmins] = useState([]);
   const [adminDetails, setAdminDetails] = useState([]); // Store admin details
   const [approvedAdmins, setApprovedAdmins] = useState([]);
@@ -19,7 +20,7 @@ const OwnerDashboard = () => {
   const [loading, setLoading] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  const walletAddress = location.state?.walletAddress;
+  
 
   // Initialize web3 and contract
   const initWeb3 = async () => {
@@ -36,13 +37,13 @@ const OwnerDashboard = () => {
     try {
       const web3 = await initWeb3();
       const contract = new web3.eth.Contract(Payroll.abi, contractAddress);
-      const adminRequest = await contract.methods.adminRequests(adminAddress).call();
+      const adminRequest = await contract.methods.getPendingAdmin().call({ from: walletAddress });
   
       // Handle IPFS data if present
       let additionalDetails = {};
       if (adminRequest.ipfsHash && isIpfsCid(adminRequest.ipfsHash)) {
         try {
-          additionalDetails = await fetchFromIPFS(adminRequest.ipfsHash);
+          additionalDetails = (await fetchFromIPFS(adminRequest.ipfsHash)).metaData;
         } catch (ipfsError) {
           console.error('Error fetching IPFS data:', ipfsError);
         }
@@ -70,16 +71,30 @@ const OwnerDashboard = () => {
   
       console.log('Pending Admins:', admins); // Log the fetched admin addresses
   
-      const adminDetails = await Promise.all(
-        admins.map(async (adminAddress) => {
-          return await fetchAdminDetails(adminAddress);
+      // const adminDetails = await Promise.all(
+      //   admins.map(async (adminAddress) => {
+      //     return await fetchAdminDetails(adminAddress);
+      //   })
+      // );
+      const tmp = await Promise.all(
+        admins.map(async (adminRow) => {
+          const obj = await fetchFromIPFS(adminRow.ipfsHash);
+          // const name = await contract.methods.adminNames(adminRow).call();
+          // const employeeId = await contract.methods.adminEmployeeIds(adminRow).call();
+          // const email = await contract.methods.adminEmails(adminRow).call();
+          return {
+            address: obj.metaData.metaMaskId,
+            name: obj.metaData.name || 'N/A',
+            employeeId: obj.metaData.employeeId.toString() || 'N/A',
+            email: obj.metaData.email || 'N/A',
+          };
         })
       );
   
-      console.log('Admin Details:', adminDetails); // Log the fetched admin details
+      console.log('Admin Details:', tmp); // Log the fetched admin details
   
       setPendingAdmins(admins);
-      setAdminDetails(adminDetails.filter((detail) => detail !== null));
+      setAdminDetails(tmp.filter((detail) => detail !== null));
     } catch (error) {
       console.error('Error fetching pending admins:', error);
       setError('Failed to fetch pending admin requests.');
@@ -96,6 +111,7 @@ const OwnerDashboard = () => {
       await contract.methods.approveAdmin(adminAddress).send({ from: walletAddress });
       setSuccess(`Admin ${adminAddress} approved.`);
       fetchPendingAdmins(); // Refresh the list
+      fetchApprovedAdmins();
     } catch (error) {
       console.error('Error approving admin:', error);
       setError('Failed to approve admin. Please try again.');
@@ -114,6 +130,7 @@ const OwnerDashboard = () => {
       await contract.methods.rejectAdmin(adminAddress).send({ from: walletAddress });
       setSuccess(`Admin ${adminAddress} rejected.`);
       fetchPendingAdmins(); // Refresh the list
+      fetchApprovedAdmins();
     } catch (error) {
       console.error('Error rejecting admin:', error);
       setError('Failed to reject admin. Please try again.');
@@ -127,18 +144,20 @@ const OwnerDashboard = () => {
       const web3 = await initWeb3();
       const contract = new web3.eth.Contract(Payroll.abi, contractAddress);
       const admins = await contract.methods.getApprovedAdmins().call({ from: walletAddress });
-  
+      console.log('my Approved Admins:', admins); // Log the fetched approved admin addresses
       // Fetch details for each approved admin
       const adminDetails = await Promise.all(
-        admins.map(async (adminAddress) => {
-          const name = await contract.methods.adminNames(adminAddress).call();
-          const employeeId = await contract.methods.adminEmployeeIds(adminAddress).call();
-          const email = await contract.methods.adminEmails(adminAddress).call();
+        admins.map(async (adminRow) => {
+          // console.log({adminRow, hash: adminRow.ipfsHash});
+          const obj = await fetchFromIPFS(adminRow.ipfsHash);
+          // const name = await contract.methods.adminNames(adminRow).call();
+          // const employeeId = await contract.methods.adminEmployeeIds(adminRow).call();
+          // const email = await contract.methods.adminEmails(adminRow).call();
           return {
-            address: adminAddress,
-            name: name || 'N/A',
-            employeeId: employeeId.toString() || 'N/A',
-            email: email || 'N/A',
+            address: obj.metaData.metaMaskId,
+            name: obj.metaData.name || 'N/A',
+            employeeId: obj.metaData.employeeId.toString() || 'N/A',
+            email: obj.metaData.email || 'N/A',
           };
         })
       );
@@ -162,14 +181,14 @@ const OwnerDashboard = () => {
   }, [walletAddress, navigate, fetchPendingAdmins, fetchApprovedAdmins]);
 
   return (
-    <Box style={styles.container}>
+    <>
       <Typography variant="h4" gutterBottom>
         Owner Dashboard
       </Typography>
   
       {/* Pending Admin Requests */}
       <Typography variant="h6">Pending Admin Requests</Typography>
-      <TableContainer component={Paper}>
+      <TableContainer component={Paper} sx={{ width: '100%', overflowX: 'auto' }}>
         <Table>
           <TableHead>
             <TableRow>
@@ -222,7 +241,7 @@ const OwnerDashboard = () => {
       <Typography variant="h6" style={{ marginTop: '20px' }}>
         Approved Admins
       </Typography>
-      <TableContainer component={Paper}>
+      <TableContainer component={Paper} sx={{ width: '100%', overflowX: 'auto' }}>
         <Table>
           <TableHead>
             <TableRow>
@@ -264,18 +283,8 @@ const OwnerDashboard = () => {
           <Alert severity="success">{success}</Alert>
         </Snackbar>
       )}
-    </Box>
+    </>
   );
-};
-
-const styles = {
-  container: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '20px',
-  },
 };
 
 export default OwnerDashboard;
