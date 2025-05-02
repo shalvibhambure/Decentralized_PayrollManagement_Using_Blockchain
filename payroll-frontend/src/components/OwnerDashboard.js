@@ -68,14 +68,6 @@ const OwnerDashboard = ({ walletAddress }) => {
       const web3 = await initWeb3();
       const contract = new web3.eth.Contract(Payroll.abi, contractAddress);
       const admins = await contract.methods.getPendingAdmins().call({ from: walletAddress });
-  
-      console.log('Pending Admins:', admins); // Log the fetched admin addresses
-  
-      // const adminDetails = await Promise.all(
-      //   admins.map(async (adminAddress) => {
-      //     return await fetchAdminDetails(adminAddress);
-      //   })
-      // );
       const tmp = await Promise.all(
         admins.map(async (adminRow) => {
           const obj = await fetchFromIPFS(adminRow.ipfsHash);
@@ -97,14 +89,13 @@ const OwnerDashboard = ({ walletAddress }) => {
       setAdminDetails(tmp.filter((detail) => detail !== null));
     } catch (error) {
       console.error('Error fetching pending admins:', error);
-      setError('Failed to fetch pending admin requests.');
+      setError('Failed to fetch pending admin requests.'+ error.message);
     }
   }, [walletAddress, fetchAdminDetails]);
 
   // Approve an admin request
   const handleApproveAdmin = async (adminAddress) => {
     setLoading(true);
-
     try {
       const web3 = await initWeb3();
       const contract = new web3.eth.Contract(Payroll.abi, contractAddress);
@@ -123,7 +114,6 @@ const OwnerDashboard = ({ walletAddress }) => {
   // Reject an admin request
   const handleRejectAdmin = async (adminAddress) => {
     setLoading(true);
-
     try {
       const web3 = await initWeb3();
       const contract = new web3.eth.Contract(Payroll.abi, contractAddress);
@@ -132,8 +122,7 @@ const OwnerDashboard = ({ walletAddress }) => {
       fetchPendingAdmins(); // Refresh the list
       fetchApprovedAdmins();
     } catch (error) {
-      console.error('Error rejecting admin:', error);
-      setError('Failed to reject admin. Please try again.');
+      setError('Failed to reject admin.'+error.message);
     } finally {
       setLoading(false);
     }
@@ -165,7 +154,7 @@ const OwnerDashboard = ({ walletAddress }) => {
       setApprovedAdmins(adminDetails);
     } catch (error) {
       console.error('Error fetching approved admins:', error);
-      setError('Failed to fetch approved admins.');
+      setError('Failed to fetch approved admins requests.'+ error.message);
     }
   }, [walletAddress]);
 

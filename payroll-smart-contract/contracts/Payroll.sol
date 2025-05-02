@@ -89,15 +89,16 @@ contract Payroll {
         AdminsList[AdminArrayIndex[adminAddress]].approved = false;
     }
 
-    function approveEmployee(address employeeAddress) public {
-        require(msg.sender == owner, "Only owner can approve employees");
+    function approveEmployee(address employeeAddress, string memory newIpfsHash) public {
         require(!RegisterEmployees[employeeAddress].approved, "Already approved");
+        RegisterEmployees[employeeAddress].ipfsHash = newIpfsHash; // Update IPFS hash
         RegisterEmployees[employeeAddress].approved = true;
-        EmployeeList[EmployeeArrayIndex[employeeAddress]].approved = true;
+        uint index = EmployeeArrayIndex[employeeAddress];
+        EmployeeList[index].ipfsHash = newIpfsHash; 
+        EmployeeList[index].approved = true;
     }
 
     function rejectEmployee(address employeeAddress) public {
-        require(msg.sender == owner, "Only owner can reject employees");
         require(!RegisterEmployees[employeeAddress].approved, "Already approved");
         RegisterEmployees[employeeAddress].approved = false;
         EmployeeList[EmployeeArrayIndex[employeeAddress]].approved = false;
@@ -120,6 +121,7 @@ contract Payroll {
         }
         return pendingAdmins;
     }
+
     function getApprovedAdmins() public view returns (Admin[] memory) {
         uint count = 0;
         for (uint i = 0; i < AdminsList.length; i++) {
@@ -155,6 +157,7 @@ contract Payroll {
         }
         return pendingEmployees;
     }
+    
     function getApprovedEmployees() public view returns (Employee[] memory) {
         uint count = 0;
         for (uint i = 0; i < EmployeeList.length; i++) {

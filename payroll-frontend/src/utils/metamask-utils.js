@@ -9,8 +9,6 @@ export const connectMetaMask = async () => {
     const accounts = await window.ethereum.request({ 
       method: 'eth_requestAccounts' 
     });
-    console.log({accounts});
-    //console.log("Signature:", accounts); // "0x..." (Copy this!)
     const web3 = new Web3(window.ethereum);
     
     return {

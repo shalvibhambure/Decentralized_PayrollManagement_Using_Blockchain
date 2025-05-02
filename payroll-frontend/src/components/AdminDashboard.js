@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Button, Dialog, DialogTitle, DialogContent, DialogActions, Typography, Box, CircularProgress, Snackbar, Alert, TextField, Tabs, Tab
 } from '@mui/material';
-import { fetchFromIPFS, isIpfsCid } from '../utils/ipfs';
+import { fetchFromIPFS, isIpfsCid, uploadToIPFS, unpinFile } from '../utils/ipfs';
 import Web3 from 'web3';
-import PayrollABI from '../contracts/Payroll.json';
 import { connectMetaMask } from '../utils/metamask-utils';
-import { uploadToIPFS } from '../utils/ipfs'; // Ensure you have this utility function
 import { contractAddress } from '../constants';
+import Payroll from '../contracts/Payroll.json';
+import { id } from 'ethers';
 
-const AdminDashboard = () => {
+const AdminDashboard = ({walletAddress}) => {
   const [web3, setWeb3] = useState(null);
   const [contract, setContract] = useState(null);
   const [account, setAccount] = useState('');
@@ -22,168 +22,69 @@ const AdminDashboard = () => {
   const [annualSalary, setAnnualSalary] = useState('');
   const [salaryPreview, setSalaryPreview] = useState(null);
   const [tabValue, setTabValue] = useState(0);
-
-  // Initialize Web3 and contract
-  const initializeWeb3 = useCallback(async () => {
+  
+  const initWeb3 = async () => {
     try {
-      if (!window.ethereum) throw new Error('Please install MetaMask');
-      
       const { web3, account } = await connectMetaMask();
-      const contractInstance = new web3.eth.Contract(
-        PayrollABI.abi,
-        contractAddress
-      );
-      
-      setWeb3(web3);
-      setContract(contractInstance);
-      setAccount(account);
-      return contractInstance;
+      return web3;
     } catch (error) {
-      console.error('Initialization error:', error);
-      setError(error.message);
-      return null;
-    }
-  }, []);
-
-  // Load pending employees with their details (Updated version)
-  const loadPendingEmployees = useCallback(async () => {
-    setLoading(true);
-    try {
-      const contractInstance = contract || await initializeWeb3();
-      if (!contractInstance) return;
-  
-      const pendingAddresses = await contractInstance.methods.getPendingEmployees().call();
-      
-      const employeesWithDetails = await Promise.all(
-        pendingAddresses.map(async (address) => {
-          try {
-            const contractData = await contractInstance.methods.employeeRequests(address).call();
-            
-            const employee = {
-              address,
-              id: contractData.employeeId?.toString() || 'N/A',
-              name: contractData.name || 'N/A',
-              email: contractData.email || 'N/A',
-              approved: contractData.approved || false
-            };
-
-            if (contractData.ipfsHash && contractData.ipfsHash.startsWith('Qm')) {
-              try {
-                const ipfsData = (await fetchFromIPFS(contractData.ipfsHash)).metaData;
-                return { ...employee, ...ipfsData };
-              } catch (ipfsError) {
-                console.warn(`IPFS fetch failed for ${address}:`, ipfsError);
-                return employee;
-              }
-            }
-            return employee;
-          } catch (err) {
-            console.error(`Error loading employee ${address}:`, err);
-            return {
-              address,
-              id: 'Error',
-              name: 'Error loading',
-              email: 'Error loading',
-              approved: false
-            };
-          }
-        })
-      );
-  
-      setPendingEmployees(employeesWithDetails.filter(e => !e.approved));
-    } catch (err) {
-      console.error('Failed to load pending employees:', err);
-      setError('Failed to load employee data. Check contract connection.');
-    } finally {
-      setLoading(false);
-    }
-  }, [contract, initializeWeb3]);
-
-  // Load approved employees with their details
-  const loadApprovedEmployees = useCallback(async () => {
-    setLoading(true);
-    try {
-      const contractInstance = contract || await initializeWeb3();
-      if (!contractInstance) return;
-
-      const approvedAddresses = await contractInstance.methods.getApprovedEmployees().call();
-      const employeesWithDetails = await Promise.all(
-        approvedAddresses.map(async (address) => {
-          try {
-            const result = await contractInstance.methods.employeeRequests(address).call();
-            
-            let additionalDetails = {};
-            if (result.ipfsHash && !result.ipfsHash.includes('pending')) {
-              try {
-                additionalDetails = (await fetchFromIPFS(result.ipfsHash)).metaData;
-              } catch (ipfsError) {
-                console.warn(`IPFS fetch failed for ${address}:`, ipfsError);
-              }
-            }
-
-            return {
-              address,
-              id: result.employeeId.toString(),
-              name: result.name,
-              email: result.email,
-              ...additionalDetails,
-              approved: result.approved
-            };
-          } catch (err) {
-            console.error(`Error loading approved employee ${address}:`, err);
-            return {
-              address,
-              id: 'Error',
-              name: 'Error loading',
-              email: 'Error loading',
-              approved: true
-            };
-          }
-        })
-      );
-      
-      setApprovedEmployees(employeesWithDetails);
-    } catch (err) {
-      console.error('Failed to load approved employees:', err);
-      setError('Failed to load approved employees: ' + err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [contract, initializeWeb3]);
-
-  // View employee details
-  // Update your handleViewDetails function
-  const handleViewDetails = async (employee) => {
-    try {
-      setLoading(true);
-      setError('');
-    
-      const contractData = await contract.methods.employeeRequests(employee.address).call();
-    
-      let ipfsData = {};
-      if (contractData.ipfsHash && isIpfsCid(contractData.ipfsHash)) {
-        try {
-          ipfsData = (await fetchFromIPFS(contractData.ipfsHash)).metaData;
-        } catch (ipfsError) {
-          console.warn("IPFS fetch failed:", ipfsError);
-        }
-      }
-
-      setEmployeeDetails({
-        ...contractData,
-        ...ipfsData,
-        address: employee.address,
-        id: contractData.employeeId.toString()
-      });
-      setOpenDialog(true);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false); // Make sure to always set loading to false
+      throw new Error('Failed to connect: ' + error.message);
     }
   };
 
-  // Calculate salary preview in pounds
+
+  const fetchPendingEmployees = useCallback (async () => {
+    try {
+      const web3 = await initWeb3();
+      const contract = new web3.eth.Contract(Payroll.abi, contractAddress);
+      console.log('walletAddress:', walletAddress);
+      const employees = await contract.methods.getPendingEmployees().call({from: walletAddress});
+      console.log('Pending Employees:', employees);
+      console.log({employees, contract, walletAddress});
+      const tmp = await Promise.all(
+        employees.map(async(employeeRow) => {
+          const obj = await fetchFromIPFS(employeeRow.ipfsHash);
+          return {
+            address: obj.metaData.metaMaskId,
+            name: obj.metaData.fullName || 'N/A',
+            employeeId: obj.metaData.employeeId.toString() || 'N/A',
+            email: obj.metaData.email || 'N/A',
+          };
+        })
+      );
+      setPendingEmployees(tmp.filter((detail) => detail !== null));
+    } catch (error) {
+      console.error('Error fetching pending employees:', error);
+      setError('Failed to fetch pending admin requests.' + error.message);
+    }
+  }, [walletAddress]);
+
+
+  const fetchApprovedEmployees = useCallback (async () => {
+    try{
+      const web3 = await initWeb3();
+      const contract = new web3.eth.Contract(Payroll.abi, contractAddress);
+      const employees = await contract.methods.getApprovedEmployees().call({from: walletAddress});
+      const employeeDetails = await Promise.all(
+        employees.map(async (employeeRow) => {
+          const obj = await fetchFromIPFS(employeeRow.ipfsHash);
+          console.log({obj});
+          return {
+            address: obj.metaData.metaMaskId,
+            name: obj.metaData.fullName || 'N/A',
+            id: obj.metaData.employeeId || 'N/A',
+            email: obj.metaData.email || 'N/A',
+          };
+        })
+      );
+      setApprovedEmployees(employeeDetails);
+    }catch (error) {
+      console.error('Error fetching approved employees:', error);
+      setError('Failed to fetch approved admin requests.' + error.message);
+    }
+  }, [walletAddress]);
+
+
   const calculateSalaryPreview = (annualSalary1) => {
     if (!annualSalary1 || isNaN(annualSalary1)) return;
     const salary = parseFloat(annualSalary1);
@@ -200,27 +101,28 @@ const AdminDashboard = () => {
     });
   };
 
-  // Approve employee with salary in pounds
-  const handleApprove = async () => {
+  const handleApprove = useCallback (async () => {
     try {
       setLoading(true);
-      if (!contract || !web3) throw new Error('Contract not initialized');
-      
-      // 1. Get existing IPFS data
+      const web3 = await initWeb3();
+      const contract = new web3.eth.Contract(Payroll.abi, contractAddress);
       let existingData = {};
-      if (employeeDetails.ipfsHash && isIpfsCid(employeeDetails.ipfsHash)) {
+      let oldCid;
+      console.log("Employee Details:", employeeDetails.ipfsHash, employeeDetails.email);
+      console.log(isIpfsCid(employeeDetails.ipfsHash));
+      console.log(employeeDetails.address);
         try {
+          oldCid = employeeDetails.ipfsHash;
           const response = await fetchFromIPFS(employeeDetails.ipfsHash);
-          // Handle both direct data and Pinata response format
           existingData = typeof response === 'object' ? response.metaData : JSON.parse(response).metaData;
         } catch (ipfsError) {
           console.warn("Failed to fetch existing IPFS data:", ipfsError);
+          return;
         }
-      }
-  
-      // 2. Prepare updated data with salary details
       const updatedData = {
-        ...existingData,
+        metaData: {
+          ...existingData,
+        },
         salaryDetails: {
           annualSalary: annualSalary,
           monthlySalary: salaryPreview.monthly,
@@ -231,35 +133,30 @@ const AdminDashboard = () => {
         },
         status: "approved"
       };
-  
-      // 3. Upload updated data using existing uploadToIPFS function
-      const uploadResult = await uploadToIPFS(updatedData);
-      
-      // Handle both direct CID and Pinata response format
+      const deleted = await unpinFile(oldCid);
+      if (!deleted) {
+        setError('Failed to unpin old IPFS file.');
+        return;
+      }
+      const uploadResult = await uploadToIPFS(updatedData, employeeDetails.email);
       const newIpfsHash = uploadResult.cid || uploadResult;
-      
+      console.log("New IPFS Hash:", newIpfsHash);
       if (!newIpfsHash) {
         throw new Error('Failed to get IPFS hash from upload');
       }
-  
-      // 4. Convert salary to wei
-      const salaryInWei = web3.utils.toWei(annualSalary, 'ether');
-      
-      // 5. Call contract with updated IPFS hash
+      console.log('employee details:', employeeDetails);
       await contract.methods.approveEmployee(
         employeeDetails.address,
-        salaryInWei,
         newIpfsHash
-      ).send({ from: account });
+      ).send({ from: walletAddress });
       
       setSuccess('Employee approved with salary!');
-      await loadPendingEmployees();
-      await loadApprovedEmployees();
+      await fetchPendingEmployees();
+      await fetchApprovedEmployees();
       setOpenDialog(false);
       setAnnualSalary('');
       setSalaryPreview(null);
     } catch (err) {
-      // Improved error handling
       const errorMsg = err.message.includes('string validation') 
         ? 'Invalid IPFS hash format. Please try again.'
         : err.message;
@@ -267,24 +164,52 @@ const AdminDashboard = () => {
     } finally {
       setLoading(false);
     }
+  }, [employeeDetails, annualSalary, salaryPreview, fetchPendingEmployees, fetchApprovedEmployees, walletAddress]);
+
+
+  const handleViewDetails = async (employee) => {
+    try {
+      setLoading(true);
+      setError('');
+      const employeeFromContract = await contract.methods.RegisterEmployees(employee.address).call();
+      let ipfsData = {};
+      let salaryDetails = {};
+        try {
+          const temp = (await fetchFromIPFS(employeeFromContract.ipfsHash));
+          ipfsData = temp.metaData;
+          salaryDetails = temp.salaryDetails;
+        } catch (ipfsError) {
+          console.warn("IPFS fetch failed:", ipfsError);
+        }
+      setEmployeeDetails({
+        ...employeeFromContract,
+        ...ipfsData,
+        salaryDetails,
+        address: employee.address,
+        id: ipfsData.employeeId?.toString() || employeeFromContract.employeeId?.toString() || 'N/A', //  Check both
+        name: ipfsData.fullName || employeeFromContract.name || 'N/A', 
+        email: ipfsData.email || employeeFromContract.email || 'N/A', 
+      });
+      setOpenDialog(true);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false); 
+    }
   };
 
-  // Reject employee
-  // Update your handleReject function
+
   const handleReject = async (employeeAddress) => {
     try {
       setLoading(true);
       if (!contract) throw new Error('Contract not initialized');
-    
-      await contract.methods.rejectEmployee(employeeAddress)
-        .send({ from: account });
-    
+      await contract.methods.rejectAdmin(employeeAddress).send({ from: account });
       setSuccess('Employee rejected!');
-      await loadPendingEmployees();
-  } catch (err) {
-      setError(err.message);
+      await fetchPendingEmployees();
+    } catch (error) {
+      setError('Failed to reject employee.'+error.message);
     } finally {
-      setLoading(false); // Ensure loading is always reset
+      setLoading(false); 
     }
   };
 
@@ -293,22 +218,49 @@ const AdminDashboard = () => {
     setTabValue(newValue);
   };
 
-  // Initialize component
+
   useEffect(() => {
     const init = async () => {
       try {
-        const contract = await initializeWeb3();
-        await loadPendingEmployees(contract);
-        await loadApprovedEmployees(contract);
-      } catch (err) {
-        console.error("Dashboard init error:", err.message);
+        const web3 = await initWeb3();
+        setWeb3(web3);
+        const contract = new web3.eth.Contract(Payroll.abi, contractAddress);
+        setContract(contract);
+        await fetchPendingEmployees(contract);
+        await fetchApprovedEmployees(contract);
+      } catch (error) {
+        console.error("Dashboard init error:", error.message);
       }
     };
   
     init();
-  }, []);
-  
-  
+  }, [fetchPendingEmployees, fetchApprovedEmployees, walletAddress]);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
   return (
     <Box sx={{ p: 3 }}>
@@ -335,7 +287,7 @@ const AdminDashboard = () => {
               <TableBody>
                 {pendingEmployees.map((employee, index) => (
                   <TableRow key={index}>
-                    <TableCell>{employee.id}</TableCell>
+                    <TableCell>{employee.employeeId}</TableCell>
                     <TableCell>{employee.name}</TableCell>
                     <TableCell>{employee.email}</TableCell>
                     <TableCell>
@@ -423,10 +375,16 @@ const AdminDashboard = () => {
               <Typography><strong>Address:</strong> {employeeDetails.address}</Typography>
               
               {/* Display additional IPFS data if available */}
-              {employeeDetails.bankName && (
+              {employeeDetails.salaryDetails && (
                 <>
-                  <Typography><strong>Bank:</strong> {employeeDetails.bankName}</Typography>
-                  <Typography><strong>Account:</strong> {employeeDetails.accountNumber}</Typography>
+                  <hr />
+                  <Typography variant="h6" gutterBottom>Salary Details</Typography>
+                  <Typography><strong>Annual Salary:</strong> {employeeDetails.salaryDetails.annualSalary}</Typography>
+                  <Typography><strong>Monthly Salary:</strong> {employeeDetails.salaryDetails.monthlySalary}</Typography>
+                  <Typography><strong>Tax Rate:</strong> {employeeDetails.salaryDetails.taxRate}</Typography>
+                  <Typography><strong>NI Rate:</strong> {employeeDetails.salaryDetails.nationalInsuranceRate}</Typography>
+                  <Typography><strong>Net Salary:</strong> {employeeDetails.salaryDetails.netSalary}</Typography>
+                  <Typography><strong>Approved On:</strong> {new Date(employeeDetails.salaryDetails.approvedOn).toLocaleDateString()}</Typography>
                 </>
               )}
 

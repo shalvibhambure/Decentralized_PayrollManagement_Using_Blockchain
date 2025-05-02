@@ -11,7 +11,7 @@ import {
   Link
 } from '@mui/material';
 import { connectMetaMask } from '../utils/metamask-utils';
-import PayrollABI from '../contracts/Payroll.json';
+import Payroll from '../contracts/Payroll.json';
 import Web3 from 'web3';
 import { contractAddress } from '../constants';
 
@@ -33,10 +33,7 @@ const EmployeeDashboard = () => {
       if (!window.ethereum) throw new Error('Please install MetaMask');
 
       const { web3, account } = await connectMetaMask();
-      const contractInstance = new web3.eth.Contract(
-        PayrollABI.abi,
-        contractAddress
-      );
+      const contractInstance = new web3.eth.Contract(Payroll.abi,contractAddress);
       
       // FIRST set account, THEN other states
       setAccount(account); 
@@ -61,9 +58,7 @@ const EmployeeDashboard = () => {
         throw new Error('No account connected');
       }
 
-      const employeeDetails = await contractInstance.methods
-        .getEmployeeDetails(currentAccount)
-        .call();
+      const employeeDetails = await contractInstance.methods.getEmployeeDetails(currentAccount).call();
       
       console.log('Employee details:', employeeDetails);
       
