@@ -29,7 +29,7 @@ const EmployeeLogin = () => {
       const checkFile = await checkForExistingUserFromWalletId(account);
       if (checkFile) {
         const userData = await fetchFromIPFS(checkFile.cid);
-        setLoginStorageKey(userData.metaData.name, checkFile.cid, account);
+        setLoginStorageKey(userData.metaData.fullName, checkFile.cid, account);
         navigate("/employee-dashboard");
       } else {
         setError("No employee data found. Please register first.");

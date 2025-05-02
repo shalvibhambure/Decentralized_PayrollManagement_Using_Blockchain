@@ -140,6 +140,12 @@ contract Payroll {
         return approvedAdmins;
     }
 
+    function getAdmin(address adminAddress) public view returns (Admin memory) {
+        uint index = AdminArrayIndex[adminAddress];
+        require(AdminsList[index].approved, "Admin is not approved");
+        return AdminsList[index];
+    }
+
     function getPendingEmployees() public view returns (Employee[] memory) {
         uint count = 0;
         for (uint i = 0; i < EmployeeList.length; i++) {
@@ -174,6 +180,12 @@ contract Payroll {
             }
         }
         return approvedEmployees;
+    }
+    
+    function getEmployee(address employeeAddress) public view returns (Employee memory) {
+        uint index = EmployeeArrayIndex[employeeAddress];
+        require(EmployeeList[index].approved, "Employee is not approved");
+        return EmployeeList[index];
     }
 
 

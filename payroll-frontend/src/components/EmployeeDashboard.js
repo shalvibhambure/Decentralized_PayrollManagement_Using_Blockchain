@@ -14,6 +14,7 @@ import { connectMetaMask } from '../utils/metamask-utils';
 import Payroll from '../contracts/Payroll.json';
 import Web3 from 'web3';
 import { contractAddress } from '../constants';
+import { fetchFromIPFS } from '../utils/ipfs';
 
 const EmployeeDashboard = () => {
   const [web3, setWeb3] = useState(null);
@@ -27,7 +28,6 @@ const EmployeeDashboard = () => {
   const [error, setError] = useState('');
   const [accessDenied, setAccessDenied] = useState(false);
 
-  // Initialize Web3 and contract
   const initializeWeb3 = useCallback(async () => {
     try {
       if (!window.ethereum) throw new Error('Please install MetaMask');
@@ -35,14 +35,13 @@ const EmployeeDashboard = () => {
       const { web3, account } = await connectMetaMask();
       const contractInstance = new web3.eth.Contract(Payroll.abi,contractAddress);
       
-      // FIRST set account, THEN other states
       setAccount(account); 
       setWeb3(web3);
       setContract(contractInstance);
       setInitialized(true);
       
       console.log('Web3 initialized with account:', account);
-      return { contractInstance, account }; // Return both
+      return { contractInstance, account }; 
     } catch (error) {
       console.error('Initialization error:', error);
       setError(error.message);
@@ -51,57 +50,52 @@ const EmployeeDashboard = () => {
   }, []);
 
 
-  // Check if employee is approved
-  const checkEmployeeAccess = useCallback(async (contractInstance, currentAccount) => {
+  const getEmployeeDetails = useCallback(async (contractInstance, currentAccount) => {
     try {
       if (!currentAccount) {
         throw new Error('No account connected');
       }
 
-      const employeeDetails = await contractInstance.methods.getEmployeeDetails(currentAccount).call();
+      const employeeDetails = await contractInstance.methods.getEmployee(currentAccount).call();
       
       console.log('Employee details:', employeeDetails);
       
-      if (!employeeDetails.exists || !employeeDetails.approved) {
+      if (!employeeDetails.approved) {
         setAccessDenied(true);
-        return false;
+        console.log('adas');
+        return { access: false, error: 'Employee is not approved' };
       }
-      return true;
+      return { access: true, data: employeeDetails };
     } catch (err) {
       console.error('Access check failed:', err);
       setError('Failed to verify employee status: ' + err.message);
-      return false;
+      return { access: false, error: 'Failed to verify employee status'};
     }
   }, []);
 
-  // Load employee data (preserving all existing functionality)
   const loadEmployeeData = useCallback(async (contractInstance, currentAccount) => {
     try {
       setLoading(true);
-      
-      // Verify access first
-      const hasAccess = await checkEmployeeAccess(contractInstance, currentAccount);
+
+      const { access: hasAccess, data: employeeRawData } = await getEmployeeDetails(contractInstance, currentAccount);
       if (!hasAccess) return;
 
-      console.log('Fetching employee data for:', currentAccount);
+      const employeeDetails = await fetchFromIPFS(employeeRawData.ipfsHash);
       
-      // Fetch all data using currentAccount instead of account state
-      const [record, salary, months] = await Promise.all([
-        contractInstance.methods.getEmployeeDetails(currentAccount).call(),
-        contractInstance.methods.getEmployeeSalaryDetails(currentAccount).call(),
-        contractInstance.methods.getSalaryMonths(currentAccount).call()
-      ]);
+      console.log('Fetching employee data for:', {currentAccount, employeeDetails});
+      
+      setEmployeeData(employeeDetails.metaData);
+      setSalaryInfo(employeeDetails.salaryDetails);
 
-      // ... rest of your data loading logic ...
+      
     } catch (err) {
       console.error('Data loading failed:', err);
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, [checkEmployeeAccess]);
+  }, [getEmployeeDetails]);
 
-  // Main initialization effect
   useEffect(() => {
     const initDashboard = async () => {
       try {
@@ -119,16 +113,6 @@ const EmployeeDashboard = () => {
     initDashboard();
   }, [initializeWeb3, loadEmployeeData]);
 
-  // Format ETH values (preserved from original)
-  const formatEth = (val) => {
-    try {
-      return web3 ? web3.utils.fromWei(val.toString(), 'ether') : val;
-    } catch {
-      return val;
-    }
-  };
-
-  // Loading state
   if (!initialized || loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
@@ -137,7 +121,6 @@ const EmployeeDashboard = () => {
     );
   }
 
-  // Error state
   if (error) {
     return (
       <Box sx={{ p: 3 }}>
@@ -146,7 +129,6 @@ const EmployeeDashboard = () => {
     );
   }
 
-  // Access denied state
   if (accessDenied) {
     return (
       <Box sx={{ p: 3 }}>
@@ -166,7 +148,6 @@ const EmployeeDashboard = () => {
     );
   }
 
-  // Main dashboard content (preserving all original display logic)
   return (
     <Box sx={{ p: 3 }}>
       <Typography variant="h4" gutterBottom>
@@ -177,15 +158,9 @@ const EmployeeDashboard = () => {
         <Typography variant="h6" gutterBottom>
           Personal Information
         </Typography>
-        <Typography><strong>Name:</strong> {employeeData.name || employeeData.fullName}</Typography>
+        <Typography><strong>Name:</strong> {employeeData.fullName}</Typography>
         <Typography><strong>Employee ID:</strong> {employeeData.employeeId}</Typography>
         <Typography><strong>Email:</strong> {employeeData.email}</Typography>
-        {employeeData.bankName && (
-          <>
-            <Typography><strong>Bank:</strong> {employeeData.bankName}</Typography>
-            <Typography><strong>Account:</strong> {employeeData.accountNumber}</Typography>
-          </>
-        )}
       </Paper>
 
       {salaryInfo && (
@@ -193,11 +168,11 @@ const EmployeeDashboard = () => {
           <Typography variant="h6" gutterBottom>
             Salary Information
           </Typography>
-          <Typography><strong>Annual Salary:</strong> £{formatEth(salaryInfo.annual)}</Typography>
-          <Typography><strong>Monthly Salary:</strong> £{formatEth(salaryInfo.monthly)}</Typography>
-          <Typography><strong>Tax:</strong> £{formatEth(salaryInfo.tax)}</Typography>
-          <Typography><strong>National Insurance:</strong> £{formatEth(salaryInfo.ni)}</Typography>
-          <Typography><strong>Net Salary:</strong> £{formatEth(salaryInfo.net)}</Typography>
+          <Typography><strong>Annual Salary:</strong> £{salaryInfo.annualSalary}</Typography>
+          <Typography><strong>Monthly Salary:</strong> £{salaryInfo.monthlySalary}</Typography>
+          <Typography><strong>Tax:</strong> £{salaryInfo.taxRate}</Typography>
+          <Typography><strong>National Insurance:</strong> £{salaryInfo.nationalInsuranceRate}</Typography>
+          <Typography><strong>Net Salary:</strong> £{salaryInfo.netSalary}</Typography>
         </Paper>
       )}
 

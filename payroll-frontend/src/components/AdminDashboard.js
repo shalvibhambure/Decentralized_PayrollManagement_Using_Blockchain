@@ -126,8 +126,8 @@ const AdminDashboard = ({walletAddress}) => {
         salaryDetails: {
           annualSalary: annualSalary,
           monthlySalary: salaryPreview.monthly,
-          taxRate: "20%",
-          nationalInsuranceRate: "12%",
+          taxRate: salaryPreview.tax,
+          nationalInsuranceRate: salaryPreview.ni,
           netSalary: salaryPreview.net,
           approvedOn: new Date().toISOString()
         },
